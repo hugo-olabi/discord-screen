@@ -10,6 +10,7 @@
     "dev": "npm -w client run dev",
     "build": "npm -w client run build && node -e \"import('fs').then(fs => fs.cpSync('client/dist', 'dist', { recursive: true }))\"",
     "preview": "npm -w client run preview",
+    "update-discord": "node scripts/update-discord-app.mjs",
     "stream": ".venv/bin/python native-streamer/stream.py || python3 native-streamer/stream.py",
     "test": "vitest run",
     "lint": "eslint ."
