@@ -1443,20 +1443,93 @@ async function connectWebRTCWHEP(whepUrl) {
 
 }
 
+async function startWebRTCSupabaseSignaling(roomId) {
+  if (peerConnection && (peerConnection.connectionState === 'connected' || peerConnection.connectionState === 'connecting')) {
+    return;
+  }
+
+  if (peerConnection) {
+    try { peerConnection.close(); } catch {}
+  }
+
+  const pc = new RTCPeerConnection({
+    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+  });
+  peerConnection = pc;
+
+  pc.addTransceiver('video', { direction: 'recvonly' });
+  pc.addTransceiver('audio', { direction: 'recvonly' });
+
+  pc.ontrack = (event) => {
+    const videoEl = document.getElementById('remoteVideo');
+    if (videoEl && event.streams && event.streams[0]) {
+      videoEl.srcObject = event.streams[0];
+      const container = document.getElementById('webrtcContainer');
+      if (container) container.hidden = false;
+    }
+  };
+
+  try {
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    setEmpty('Iniciando WebRTC via Supabase... 📡', `ID da Sala: ${roomId}`);
+
+    await supabase.from('rooms').update({
+      sdp_offer: offer.sdp,
+      sdp_answer: null
+    }).eq('id', roomId);
+
+    const signalChannel = supabase.channel(`room_signal_${roomId}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` }, async (payload) => {
+        if (payload.new && payload.new.sdp_answer) {
+          try {
+            await pc.setRemoteDescription(new RTCSessionDescription({
+              type: 'answer',
+              sdp: payload.new.sdp_answer
+            }));
+            const container = document.getElementById('webrtcContainer');
+            if (container) container.hidden = false;
+            setEmpty('Transmissão Nativa WebRTC Ao Vivo! 🟢', 'Conectado via Supabase Direct UDP');
+            toast('WebRTC UDP Conectado via Supabase!');
+          } catch (e) {
+            console.warn('[WebRTC] Error setting remote answer:', e);
+          }
+        }
+      })
+      .subscribe();
+  } catch (err) {
+    console.warn('[WebRTC Supabase] Signaling error:', err);
+  }
+}
+
 async function subscribeViewerToSupabaseRoom(roomId) {
   if (!roomId) return;
+
+  startWebRTCSupabaseSignaling(roomId);
 
   const handleRoomUpdate = (roomData) => {
     if (!roomData) return;
 
-    if (roomData.tunnel_url) {
+    if (roomData.sdp_answer) {
+      if (peerConnection && peerConnection.signalingState === 'have-local-offer') {
+        try {
+          peerConnection.setRemoteDescription(new RTCSessionDescription({
+            type: 'answer',
+            sdp: roomData.sdp_answer
+          }));
+          const container = document.getElementById('webrtcContainer');
+          if (container) container.hidden = false;
+          setEmpty('Transmissão Nativa WebRTC Ao Vivo! 🟢', 'Conectado via Supabase Direct UDP');
+        } catch {}
+      }
+    } else if (roomData.tunnel_url) {
       connectWebRTCWHEP(roomData.tunnel_url);
     } else {
       setEmpty('Aguardando Transmissão Nativa (UDP)...', `ID da Sala: ${roomId}`);
-      const container = document.getElementById('webrtcContainer');
-      if (container) container.hidden = true;
     }
   };
+
 
 
   try {
@@ -2075,7 +2148,8 @@ async function openNativeStreamerModal() {
         id: shareToken,
         guild_id: session?.guildId || '',
         channel_id: session?.channelId || '',
-        name: currentRoom?.name || 'Sala de Tela',
+        name: 'Sala de Tela',
+
         streamer_id: session?.user?.id || '',
         status: 'waiting',
         updated_at: new Date().toISOString(),

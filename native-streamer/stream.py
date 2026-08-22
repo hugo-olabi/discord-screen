@@ -120,16 +120,21 @@ def main():
             except Exception as ea:
                 print(f"  [Audio] Erro ao iniciar captura de áudio: {ea}")
 
+        from webrtc_signaling import iniciar_loop_signaling_supabase
+        from config import SUPABASE_URL, SUPABASE_ANON_KEY
+
         whep_srv, porta_real = await iniciar_servidor_whep(3001)
         cf_proc, cf_url = iniciar_tunel_cloudflared(porta_real)
-
         tunnel_public_url = (cf_url.rstrip("/") + "/whep") if cf_url else server_url
-
-
 
         print(f"  [Transmissão] Túnel configurado: {tunnel_public_url}")
         print("  [Supabase] Registrando sala como live no Supabase...")
         atualizar_url_tunel_supabase(token, tunnel_public_url, status="live")
+
+        signaling_task = asyncio.create_task(
+            iniciar_loop_signaling_supabase(SUPABASE_URL, SUPABASE_ANON_KEY, token)
+        )
+
         print("  ✅ Transmissão nativa conectada e ao vivo no Supabase! Pressione Ctrl+C para encerrar.\n")
 
         try:
@@ -137,9 +142,11 @@ def main():
                 server_url, token, out_stream, proc_stderr=cp, audio_stream=audio_proc
             )
         finally:
+            signaling_task.cancel()
             if cf_proc:
                 try: cf_proc.terminate()
                 except Exception: pass
+
 
 
 
