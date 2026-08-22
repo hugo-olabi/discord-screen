@@ -12,6 +12,10 @@ from portal import obter_pipewire_fd_e_node
 from ffmpeg import iniciar_processo_captura, iniciar_processo_captura_audio
 from ws_client import iniciar_transmissao_websocket
 from supabase_client import atualizar_url_tunel_supabase
+from cloudflared_tunnel import iniciar_tunel_cloudflared
+
+# ...
+
 
 
 def main():
@@ -113,14 +117,23 @@ def main():
             except Exception as ea:
                 print(f"  [Audio] Erro ao iniciar captura de áudio: {ea}")
 
+        cf_proc, cf_url = iniciar_tunel_cloudflared()
+        tunnel_public_url = cf_url or server_url
+
         def ao_conectar_cb():
             print("  Transmissão nativa conectada e ao vivo! Pressione Ctrl+C para encerrar.\n")
-            atualizar_url_tunel_supabase(token, server_url, status="live")
+            atualizar_url_tunel_supabase(token, tunnel_public_url, status="live")
 
-        await iniciar_transmissao_websocket(
-            server_url, token, out_stream, proc_stderr=cp, audio_stream=audio_proc,
-            ao_conectar=ao_conectar_cb
-        )
+        try:
+            await iniciar_transmissao_websocket(
+                server_url, token, out_stream, proc_stderr=cp, audio_stream=audio_proc,
+                ao_conectar=ao_conectar_cb
+            )
+        finally:
+            if cf_proc:
+                try: cf_proc.terminate()
+                except Exception: pass
+
 
 
     try:

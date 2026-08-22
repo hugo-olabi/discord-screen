@@ -21,87 +21,38 @@ const ENDERECO_LT = /https:\/\/[a-z0-9-]+\.loca\.lt/;
 export async function abrirTunel({ aoEndereco = () => {}, rapido = false, gravar } = {}) {
   const env = lerEnv();
   const porta = env.PORT || '3001';
-  const config = rapido ? '' : env.TUNEL_CONFIG || '';
-  const subdomínioFixo = rapido ? '' : (env.FIXED_SUBDOMAIN || '').trim();
+  const subdomínioFixo = (env.FIXED_SUBDOMAIN || '').trim();
+  const escrever = gravar ?? true;
 
-  const escrever = (gravar ?? !rapido) && !(rapido && (env.TUNEL_CONFIG || env.FIXED_SUBDOMAIN));
-
-  // Modo A: Subdomínio Fixo Gratuito via localtunnel
+  const ltArgs = ['-y', 'localtunnel', '--port', porta];
   if (subdomínioFixo) {
-    const tunelLt = spawn(
-      'npx',
-      ['-y', 'localtunnel', '--port', porta, '--subdomain', subdomínioFixo],
-      {
-        stdio: ['ignore', 'pipe', 'pipe'],
-      },
-    );
-    tunelLt.porta = porta;
-    tunelLt.fixo = true;
-
-    let achadoLt = null;
-    const procurarLt = (pedaco) => {
-      const url = pedaco.toString().match(ENDERECO_LT)?.[0];
-      if (!url || url === achadoLt) return;
-
-      achadoLt = url;
-      if (escrever) gravarEnv({ PUBLIC_ORIGIN: url });
-      anunciar(url, escrever, env.DISCORD_CLIENT_ID);
-      aoEndereco(url);
-    };
-
-    tunelLt.stdout.on('data', procurarLt);
-    tunelLt.stderr.on('data', procurarLt);
-    return tunelLt;
+    ltArgs.push('--subdomain', subdomínioFixo);
   }
 
-  // Modo B: Túnel Nomeado via Cloudflare
-  const args = config
-    ? ['--config', config, 'tunnel', '--no-autoupdate', 'run']
-    : [
-        '--config',
-        configNeutro(),
-        'tunnel',
-        '--no-autoupdate',
-        '--url',
-        `http://localhost:${porta}`,
-      ];
+  console.log(`${cor.forte}  Iniciando túnel localtunnel para a aplicação web...${cor.fim}`);
 
-  const cloudflared = await garantirCloudflared();
-  const tunel = spawn(cloudflared, args, { stdio: ['ignore', 'pipe', 'pipe'] });
-  tunel.porta = porta;
-  tunel.fixo = Boolean(config);
+  const tunelLt = spawn('npx', ltArgs, {
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  tunelLt.porta = porta;
+  tunelLt.fixo = Boolean(subdomínioFixo);
 
-  if (config) {
-    const doArquivo = hostnameDoConfig(config);
-    const origem = doArquivo || env.PUBLIC_ORIGIN || '';
+  let achadoLt = null;
+  const procurarLt = (pedaco) => {
+    const url = pedaco.toString().match(ENDERECO_LT)?.[0];
+    if (!url || url === achadoLt) return;
 
-    if (origem && origem !== env.PUBLIC_ORIGIN) {
-      gravarEnv({ PUBLIC_ORIGIN: origem });
-      console.log(
-        `${cor.amarelo}  O .env apontava para outro endereço — corrigi para o do túnel.${cor.fim}`,
-      );
-    }
-
-    console.log(`${cor.verde}  ${origem || '(endereço definido no config do túnel)'}${cor.fim}\n`);
-    aoEndereco(origem || null);
-    return tunel;
-  }
-
-  let achado = null;
-  const procurar = (pedaco) => {
-    const url = pedaco.toString().match(ENDERECO_CF)?.[0];
-    if (!url || url === achado) return;
-
-    achado = url;
+    achadoLt = url;
     if (escrever) gravarEnv({ PUBLIC_ORIGIN: url });
     anunciar(url, escrever, env.DISCORD_CLIENT_ID);
     aoEndereco(url);
   };
 
-  tunel.stdout.on('data', procurar);
-  tunel.stderr.on('data', procurar);
-  return tunel;
+  tunelLt.stdout.on('data', procurarLt);
+  tunelLt.stderr.on('data', procurarLt);
+  return tunelLt;
 }
+
 
 function hostnameDoConfig(caminho) {
   try {
