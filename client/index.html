@@ -22,7 +22,11 @@
         <div class="icon">🖥️</div>
         <h1 id="emptyTitle">Conectando…</h1>
         <p id="emptyText" class="muted">Entrando na sala</p>
+        <div id="webrtcContainer" style="margin-top: 20px; width: 100%; max-width: 1100px;" hidden>
+          <video id="remoteVideo" autoplay playsinline controls style="width: 100%; max-height: 75vh; border-radius: 12px; background: #000; object-fit: contain; box-shadow: 0 10px 30px rgba(0,0,0,0.6);"></video>
+        </div>
       </div>
+
 
       <!-- Lobby: escolher ou criar sala antes de entrar -->
       <div id="lobby" class="lobby" hidden>

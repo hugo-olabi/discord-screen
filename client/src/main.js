@@ -1370,6 +1370,66 @@ function openRoom(tokens, room) {
 
 let viewerSupabaseChannel = null;
 let roomPollInterval = null;
+let peerConnection = null;
+let currentWhepUrl = null;
+
+async function connectWebRTCWHEP(whepUrl) {
+  if (currentWhepUrl === whepUrl && peerConnection && (peerConnection.connectionState === 'connected' || peerConnection.connectionState === 'connecting')) {
+    return;
+  }
+  currentWhepUrl = whepUrl;
+
+  if (peerConnection) {
+    try { peerConnection.close(); } catch {}
+  }
+
+  const pc = new RTCPeerConnection({
+    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+  });
+  peerConnection = pc;
+
+  pc.addTransceiver('video', { direction: 'recvonly' });
+  pc.addTransceiver('audio', { direction: 'recvonly' });
+
+  pc.ontrack = (event) => {
+    const videoEl = document.getElementById('remoteVideo');
+    if (videoEl && event.streams && event.streams[0]) {
+      videoEl.srcObject = event.streams[0];
+      const container = document.getElementById('webrtcContainer');
+      if (container) container.hidden = false;
+    }
+  };
+
+  try {
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    const res = await fetch(whepUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/sdp' },
+      body: offer.sdp
+    });
+
+    if (!res.ok) {
+      throw new Error(`WHEP HTTP ${res.status}`);
+    }
+
+    const answerSdp = await res.text();
+    await pc.setRemoteDescription(new RTCSessionDescription({
+      type: 'answer',
+      sdp: answerSdp
+    }));
+
+    const container = document.getElementById('webrtcContainer');
+    if (container) container.hidden = false;
+
+    setEmpty('Transmissão Nativa WebRTC Ao Vivo! 🟢', 'Conectado via WebRTC Direct UDP');
+    toast('Transmissão WebRTC UDP Conectada!');
+  } catch (err) {
+    console.warn('[WebRTC WHEP] Handshake notice:', err.message);
+    setEmpty('Transmissão Nativa UDP (WHEP)', `Conectando via WebRTC: ${whepUrl}`);
+  }
+}
 
 async function subscribeViewerToSupabaseRoom(roomId) {
   if (!roomId) return;
@@ -1378,34 +1438,14 @@ async function subscribeViewerToSupabaseRoom(roomId) {
     if (!roomData) return;
 
     if (roomData.tunnel_url) {
-      setEmpty(
-        'Transmissão Nativa UDP Ativa! 🟢',
-        `Conectado ao túnel: ${roomData.tunnel_url}`
-      );
-
-      let streamBanner = document.getElementById('nativeStreamBanner');
-      if (!streamBanner) {
-        streamBanner = document.createElement('div');
-        streamBanner.id = 'nativeStreamBanner';
-        streamBanner.className = 'native-stream-banner';
-        $('empty').appendChild(streamBanner);
-      }
-
-      streamBanner.innerHTML = `
-        <div style="background: rgba(46, 204, 113, 0.15); border: 1px solid #2ecc71; padding: 16px; border-radius: 12px; margin: 20px auto; max-width: 500px; text-align: center;">
-          <h3 style="color: #2ecc71; margin-bottom: 8px;">📡 Transmissão Direct UDP no Ar</h3>
-          <p style="font-size: 14px; margin-bottom: 12px;">Túnel: <code style="background: #111; color: #58a6ff; padding: 4px 8px; border-radius: 4px;">${roomData.tunnel_url}</code></p>
-          <a href="${roomData.tunnel_url}" target="_blank" class="btn go" style="display: inline-block; padding: 8px 16px; font-weight: bold; text-decoration: none;">Abrir Transmissão Ao Vivo</a>
-        </div>
-      `;
-
-      toast(`Túnel UDP Ativo: ${roomData.tunnel_url}`);
+      connectWebRTCWHEP(roomData.tunnel_url);
     } else {
       setEmpty('Aguardando Transmissão Nativa (UDP)...', `ID da Sala: ${roomId}`);
-      const banner = document.getElementById('nativeStreamBanner');
-      if (banner) banner.remove();
+      const container = document.getElementById('webrtcContainer');
+      if (container) container.hidden = true;
     }
   };
+
 
   try {
     const { data } = await supabase.from('rooms').select('*').eq('id', roomId).maybeSingle();

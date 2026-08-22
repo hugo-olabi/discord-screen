@@ -13,7 +13,8 @@ from ffmpeg import iniciar_processo_captura, iniciar_processo_captura_audio
 from ws_client import iniciar_transmissao_websocket
 from supabase_client import atualizar_url_tunel_supabase
 from cloudflared_tunnel import iniciar_tunel_cloudflared
-from http_server import iniciar_servidor_http_nativo
+from whep_server import iniciar_servidor_whep
+
 
 
 # ...
@@ -119,9 +120,9 @@ def main():
             except Exception as ea:
                 print(f"  [Audio] Erro ao iniciar captura de áudio: {ea}")
 
-        http_srv = iniciar_servidor_http_nativo(3001)
+        whep_srv = iniciar_servidor_whep(3001)
         cf_proc, cf_url = iniciar_tunel_cloudflared(3001)
-        tunnel_public_url = cf_url or server_url
+        tunnel_public_url = (cf_url.rstrip("/") + "/whep") if cf_url else server_url
 
 
 
