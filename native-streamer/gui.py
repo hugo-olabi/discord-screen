@@ -392,7 +392,9 @@ class StreamerAppWindow(Gtk.ApplicationWindow):
             try:
                 asyncio.run(run_async())
             except Exception as e:
-                GLib.idle_add(lambda: self.val_status.set_text(f"Error: {e}"))
+                err_text = str(e)
+                GLib.idle_add(lambda err=err_text: self.val_status.set_text(f"Error: {err}"))
+
 
         threading.Thread(target=run_loop, daemon=True).start()
 
