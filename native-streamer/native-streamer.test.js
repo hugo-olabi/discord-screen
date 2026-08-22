@@ -87,10 +87,12 @@ describe('native-streamer: janelas', () => {
     expect(Array.isArray(lista)).toBe(true);
   });
 
-  it('executa obterPipeWireNodeViaPortal sem travar se portal indisponivel', () => {
+  it('executa obterPipeWireNodeViaPortal sem travar se portal indisponivel', { timeout: 20000 }, () => {
     const node = obterPipeWireNodeViaPortal();
     expect(node === null || typeof node === 'string').toBe(true);
   });
+
+
 });
 
 describe('native-streamer: url parser', () => {

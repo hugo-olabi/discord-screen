@@ -374,8 +374,11 @@ class StreamerAppWindow(Gtk.ApplicationWindow):
                     except Exception as ea:
                         sys.stderr.write(f"\n[Audio] Error starting audio capture: {ea}\n")
 
-                cf_proc, cf_url = iniciar_tunel_cloudflared()
+                from http_server import iniciar_servidor_http_nativo
+                http_srv = iniciar_servidor_http_nativo(3001)
+                cf_proc, cf_url = iniciar_tunel_cloudflared(3001)
                 tunnel_public_url = cf_url or server_url
+
 
                 GLib.idle_add(lambda: self.val_status.set_text("Live"))
                 GLib.idle_add(lambda: self.val_lag.set_text("< 50ms"))
