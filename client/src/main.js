@@ -1369,16 +1369,60 @@ function openRoom(tokens, room) {
 
 
 let viewerSupabaseChannel = null;
+let roomPollInterval = null;
+
 async function subscribeViewerToSupabaseRoom(roomId) {
   if (!roomId) return;
+
+  const handleRoomUpdate = (roomData) => {
+    if (!roomData) return;
+
+    if (roomData.tunnel_url) {
+      setEmpty(
+        'Transmissão Nativa UDP Ativa! 🟢',
+        `Conectado ao túnel: ${roomData.tunnel_url}`
+      );
+
+      let streamBanner = document.getElementById('nativeStreamBanner');
+      if (!streamBanner) {
+        streamBanner = document.createElement('div');
+        streamBanner.id = 'nativeStreamBanner';
+        streamBanner.className = 'native-stream-banner';
+        $('empty').appendChild(streamBanner);
+      }
+
+      streamBanner.innerHTML = `
+        <div style="background: rgba(46, 204, 113, 0.15); border: 1px solid #2ecc71; padding: 16px; border-radius: 12px; margin: 20px auto; max-width: 500px; text-align: center;">
+          <h3 style="color: #2ecc71; margin-bottom: 8px;">📡 Transmissão Direct UDP no Ar</h3>
+          <p style="font-size: 14px; margin-bottom: 12px;">Túnel: <code style="background: #111; color: #58a6ff; padding: 4px 8px; border-radius: 4px;">${roomData.tunnel_url}</code></p>
+          <a href="${roomData.tunnel_url}" target="_blank" class="btn go" style="display: inline-block; padding: 8px 16px; font-weight: bold; text-decoration: none;">Abrir Transmissão Ao Vivo</a>
+        </div>
+      `;
+
+      toast(`Túnel UDP Ativo: ${roomData.tunnel_url}`);
+    } else {
+      setEmpty('Aguardando Transmissão Nativa (UDP)...', `ID da Sala: ${roomId}`);
+      const banner = document.getElementById('nativeStreamBanner');
+      if (banner) banner.remove();
+    }
+  };
+
   try {
     const { data } = await supabase.from('rooms').select('*').eq('id', roomId).maybeSingle();
-    if (data && data.tunnel_url) {
-      toast(`Túnel UDP ativo: ${data.tunnel_url}`);
-    }
+    if (data) handleRoomUpdate(data);
   } catch (err) {
     console.warn('[Supabase] Error fetching room:', err);
   }
+
+  clearInterval(roomPollInterval);
+  roomPollInterval = setInterval(async () => {
+    try {
+      const { data } = await supabase.from('rooms').select('*').eq('id', roomId).maybeSingle();
+      if (data) handleRoomUpdate(data);
+    } catch {
+      /* ignore */
+    }
+  }, 2000);
 
   if (viewerSupabaseChannel) supabase.removeChannel(viewerSupabaseChannel);
 
@@ -1388,14 +1432,12 @@ async function subscribeViewerToSupabaseRoom(roomId) {
       'postgres_changes',
       { event: '*', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` },
       (payload) => {
-        const updatedRoom = payload.new;
-        if (updatedRoom && updatedRoom.tunnel_url) {
-          toast(`Túnel UDP ativo: ${updatedRoom.tunnel_url}`);
-        }
+        if (payload.new) handleRoomUpdate(payload.new);
       }
     )
     .subscribe();
 }
+
 
 
 // A limpeza toda — inclusive parar de transmitir — vive em showLobby.
