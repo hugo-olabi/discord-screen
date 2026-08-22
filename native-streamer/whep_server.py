@@ -133,8 +133,21 @@ async def cors_middleware(request, handler):
     return response
 
 
-async def iniciar_servidor_whep(porta: int = 3001):
-    """Inicia o servidor WebRTC WHEP HTTP na porta especificada."""
+import socket
+
+def encontrar_porta_livre(porta_desejada: int = 3001) -> int:
+    """Procura uma porta TCP livre a partir de porta_desejada."""
+    for p in range(porta_desejada, porta_desejada + 30):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind(('127.0.0.1', p))
+                return p
+            except OSError:
+                continue
+    return porta_desejada
+
+async def iniciar_servidor_whep(porta_desejada: int = 3001) -> tuple[web.AppRunner, int]:
+    """Inicia o servidor WebRTC WHEP HTTP na primeira porta livre disponível."""
     app = web.Application(middlewares=[cors_middleware])
     app.router.add_options("/{path:.*}", handle_options)
     app.router.add_post("/whep", handle_whep_offer)
@@ -143,9 +156,22 @@ async def iniciar_servidor_whep(porta: int = 3001):
 
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", porta)
+
+    porta_livre = encontrar_porta_livre(porta_desejada)
+    for p in range(porta_livre, porta_livre + 10):
+        try:
+            site = web.TCPSite(runner, "0.0.0.0", p)
+            await site.start()
+            print(f"  [WebRTC WHEP Server] Servidor WHEP ativo na porta {p}")
+            return runner, p
+        except OSError:
+            continue
+
+    site = web.TCPSite(runner, "0.0.0.0", 0)
     await site.start()
-    print(f"  [WebRTC WHEP Server] Servidor WHEP ativo na porta {porta}")
-    return runner
+    bound_port = site._server.sockets[0].getsockname()[1]
+    print(f"  [WebRTC WHEP Server] Servidor WHEP ativo na porta dinâmica {bound_port}")
+    return runner, bound_port
+
 
 

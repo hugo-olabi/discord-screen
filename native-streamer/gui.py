@@ -375,9 +375,10 @@ class StreamerAppWindow(Gtk.ApplicationWindow):
                         sys.stderr.write(f"\n[Audio] Error starting audio capture: {ea}\n")
 
                 from whep_server import iniciar_servidor_whep
-                whep_srv = await iniciar_servidor_whep(3001)
+                whep_srv, porta_real = await iniciar_servidor_whep(3001)
 
-                cf_proc, cf_url = iniciar_tunel_cloudflared(3001)
+                cf_proc, cf_url = iniciar_tunel_cloudflared(porta_real)
+
                 tunnel_public_url = (cf_url.rstrip("/") + "/whep") if cf_url else server_url
 
 
