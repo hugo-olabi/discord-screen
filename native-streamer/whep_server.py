@@ -7,6 +7,7 @@ import sys
 from aiohttp import web
 from aiortc import RTCPeerConnection, RTCSessionDescription, MediaStreamTrack
 from aiortc.contrib.media import MediaPlayer
+from fractions import Fraction
 import av
 
 logging.basicConfig(level=logging.WARNING)
@@ -23,7 +24,8 @@ class SyntheticVideoTrack(MediaStreamTrack):
         self._timestamp = 0
 
     async def recv(self):
-        pts, time_base = self._timestamp, av.Rational(1, 30)
+        pts = self._timestamp
+        time_base = Fraction(1, 30)
         self._timestamp += 1
         await asyncio.sleep(1 / 30)
 
@@ -34,6 +36,7 @@ class SyntheticVideoTrack(MediaStreamTrack):
         frame.pts = pts
         frame.time_base = time_base
         return frame
+
 
 async def handle_options(request):
     return web.Response(
