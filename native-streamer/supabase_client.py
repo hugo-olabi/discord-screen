@@ -5,26 +5,30 @@ import urllib.request
 import urllib.error
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "https://elpfsixxbdnvwxhundxl.supabase.co")
-SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", os.getenv("VITE_SUPABASE_ANON_KEY", "sb_publishable_fPJXQn7F6qVRMiCGr51wxw_YTfZcZCg"))
+JWT_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVscGZzaXh4YmRudnd4aHVuZHhsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODczNTYxOTksImV4cCI6MjEwMjkzMjE5OX0.Z7dJYzALG7Biow4qQ_5Hc_51sPS3PpL6keseBvDHfOA"
+env_key = os.getenv("SUPABASE_ANON_KEY", os.getenv("VITE_SUPABASE_ANON_KEY", ""))
+SUPABASE_ANON_KEY = env_key if env_key.startswith("eyJ") else JWT_ANON_KEY
 
 
 def atualizar_url_tunel_supabase(token_id: str, tunnel_url: str, status: str = "live") -> bool:
     """
-    Atualiza a tabela 'rooms' no Supabase com o URL do túnel UDP e status 'live'.
+    Atualiza (ou faz upsert) na tabela 'rooms' no Supabase com o URL do túnel UDP e status 'live'.
     """
     if not token_id:
         print("  [Supabase] Token da sala não fornecido.")
         return False
 
-    url = f"{SUPABASE_URL.rstrip('/')}/rest/v1/rooms?id=eq.{token_id}"
+    url = f"{SUPABASE_URL.rstrip('/')}/rest/v1/rooms"
     headers = {
         "Content-Type": "application/json",
         "apikey": SUPABASE_ANON_KEY,
         "Authorization": f"Bearer {SUPABASE_ANON_KEY}",
-        "Prefer": "return=minimal"
+        "Prefer": "resolution=merge-duplicates,return=minimal"
     }
 
     payload = {
+        "id": token_id,
+        "name": f"Sala {token_id[:6]}",
         "tunnel_url": tunnel_url,
         "status": status,
         "updated_at": "now()"
@@ -32,9 +36,9 @@ def atualizar_url_tunel_supabase(token_id: str, tunnel_url: str, status: str = "
 
     try:
         data = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(url, data=data, headers=headers, method="PATCH")
+        req = urllib.request.Request(url, data=data, headers=headers, method="POST")
         with urllib.request.urlopen(req, timeout=10) as resp:
-            if resp.status in (200, 204):
+            if resp.status in (200, 201, 204):
                 print(f"  [Supabase] URL do túnel publicado com sucesso no Supabase! ({tunnel_url})")
                 return True
     except urllib.error.HTTPError as e:
@@ -43,3 +47,4 @@ def atualizar_url_tunel_supabase(token_id: str, tunnel_url: str, status: str = "
         print(f"  [Supabase] Falha ao comunicar com Supabase: {e}")
 
     return False
+
