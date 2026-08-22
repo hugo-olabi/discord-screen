@@ -4,8 +4,9 @@ import os
 import urllib.request
 import urllib.error
 
-SUPABASE_URL = os.getenv("SUPABASE_URL", "https://kujdoibdrqzfpnekasod.supabase.co")
-SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", os.getenv("VITE_SUPABASE_ANON_KEY", ""))
+SUPABASE_URL = os.getenv("SUPABASE_URL", "https://elpfsixxbdnvwxhundxl.supabase.co")
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", os.getenv("VITE_SUPABASE_ANON_KEY", "sb_publishable_fPJXQn7F6qVRMiCGr51wxw_YTfZcZCg"))
+
 
 def atualizar_url_tunel_supabase(token_id: str, tunnel_url: str, status: str = "live") -> bool:
     """

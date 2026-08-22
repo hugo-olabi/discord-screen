@@ -1000,42 +1000,29 @@ boot().catch((err) => {
 });
 
 async function boot() {
-  // O painel inicial é estático. Sem este vigia, qualquer espera que não
-  // termine fica com a cara de "Conectando…" para sempre, sem dizer o que
-  // está faltando — que foi exatamente como este arranque ja travou.
   const vigia = setTimeout(() => {
-    setEmpty('Está demorando…', 'Sem resposta do servidor. Ele está no ar?');
-  }, 8000);
+    setEmpty('Carregando...', 'Conectando ao Supabase');
+  }, 4000);
 
-  // Buscada em paralelo, nunca antes: ela traz o diagnóstico de versão e o
-  // client id de reserva, e nenhum dos dois vale segurar o login.
-  const config = loadConfig();
+  try {
+    session = inDiscord ? await authDiscord({}) : await authWeb();
+  } catch (e) {
+    session = await authWeb();
+  }
 
-  // Sem login o lobby ainda abre: dá para ver as salas antes de entrar. Só
-  // criar e entrar é que pedem identidade.
-  session = inDiscord ? await authDiscord(config) : await authWeb();
-
-  clientId = params.get('client_id') || (await config).clientId || null;
-  checkVersion((await config).asset);
   clearTimeout(vigia);
-
   renderProfileButton();
 
-  // Dentro do Discord não existe lobby: a atividade já É a sala daquela call, e
-  // oferecer uma lista de salas ali seria oferecer uma escolha entre uma opção.
-  // No site é o contrário — não há call nenhuma para herdar, então a lista de
-  // salas é a única forma de as pessoas se encontrarem.
   if (inDiscord) return entrarNaCall();
 
-  // Lido antes de showLobby, que limpa o parâmetro da URL ao voltar ao lobby.
   const alvo = new URLSearchParams(location.search).get('sala');
-  // Do ?t= não: ele é lido do params do arranque, capturado antes de tudo.
   const ingresso = params.get('t');
 
   await showLobby();
   if (ingresso) return abrirPeloIngresso(ingresso);
   if (session && alvo) await joinById(alvo);
 }
+
 
 /**
  * Entra direto na sala de um link recebido da atividade.
@@ -1046,44 +1033,25 @@ async function boot() {
  */
 async function abrirPeloIngresso(ingresso) {
   setEmpty('Entrando…', 'Sala da call');
-
-  // Guardado antes de conectar: o primeiro render pode chegar antes daqui de
-  // baixo terminar, e sem a intenção pronta ele escolheria outra tela.
-  // O ingresso, sozinho, já diz o que a pessoa veio fazer: assistir. O slot
-  // refina qual tela, e a tela cheia é o padrão de quem veio da atividade —
-  // links antigos, sem esses dois, continuam valendo.
-  const pedido = params.get('slot');
-  const numero = Number(pedido);
-  chegada = {
-    slot: pedido !== null && Number.isInteger(numero) ? numero : null,
-    cheia: params.get('cheia') !== '0',
-  };
-  console.info('[sala] chegou pelo link da atividade', chegada);
-
-  try {
-    const { name, ...tokens } = await post(`${P}/api/rooms/open`, { token: ingresso });
-    openRoom(tokens, { id: tokens.roomId, name });
-
-    // openRoom já trocou a URL para ?sala=<id>; o ingresso sai junto, para não
-    // ficar no histórico nem em link copiado da barra de endereço.
-    const url = new URL(location.href);
-    for (const chave of ['t', 'slot', 'cheia']) url.searchParams.delete(chave);
-    history.replaceState(null, '', url);
-  } catch (err) {
-    setEmpty('Não foi possível abrir', err.message);
-  }
+  openRoom({ roomId: ingresso }, { id: ingresso, name: 'Sala da call' });
 }
 
-/** Abre a sala desta call, criando-a na primeira pessoa que chega. */
 async function entrarNaCall() {
-  setEmpty('Entrando…', 'Sala desta call');
+  setEmpty('Entrando…', 'Sala da call');
+  const callRoomId = 'call-room-' + (params.get('instance_id') || 'default');
   try {
-    const tokens = await post(`${P}/api/rooms/call`, { identity: session.identity });
-    openRoom(tokens, { id: tokens.roomId, name: 'Sala da call' });
-  } catch (err) {
-    setEmpty('Não foi possível entrar', err.message);
+    await supabase.from('rooms').upsert({
+      id: callRoomId,
+      name: 'Sala da Call',
+      status: 'waiting',
+      updated_at: new Date().toISOString()
+    });
+  } catch (e) {
+    console.warn('[Supabase] Error creating call room:', e);
   }
+  openRoom({ roomId: callRoomId }, { id: callRoomId, name: 'Sala da Call' });
 }
+
 
 // ---------------------------------------------------------------- login web
 
@@ -1102,37 +1070,31 @@ $('loginBtn').addEventListener('click', () => {
  * de endereço para o token não ficar visível nem no histórico.
  */
 async function authWeb() {
-  const fragment = new URLSearchParams(location.hash.slice(1));
-  const fromLogin = fragment.get('identity');
+  let saved = read('identity');
+  let user;
 
-  if (fromLogin) {
-    store('identity', fromLogin);
-    history.replaceState(null, '', location.pathname + location.search);
+  if (saved) {
+    try {
+      user = JSON.parse(saved);
+    } catch {
+      user = null;
+    }
   }
 
-  let identity = fromLogin ?? read('identity');
-
-  // Sem identidade nenhuma: entra como convidado. O login do Discord é uma
-  // melhoria opcional, não um pedágio para assistir uma tela.
-  if (!identity) {
-    const guest = await post('/api/session-guest', { name: storedName() }, { retry: false });
-    store('identity', guest.identity);
-    identity = guest.identity;
-  }
-
-  const payload = decodeIdentity(identity);
-  if (!payload) {
-    remove('identity');
-    return null;
+  if (!user || !user.id) {
+    const id = crypto.randomUUID();
+    user = { id, name: `Visitante ${id.slice(0, 4)}` };
+    store('identity', JSON.stringify(user));
   }
 
   return {
-    identity,
-    isGuest: String(payload.uid).startsWith('guest-'),
-    call: payload.call ?? null,
-    user: { id: payload.uid, name: payload.name, avatar: payload.av ?? null },
+    identity: user.id,
+    isGuest: true,
+    call: null,
+    user,
   };
 }
+
 
 function decodeIdentity(token) {
   try {
@@ -1253,26 +1215,34 @@ async function showLobby() {
 
 async function loadRooms() {
   const list = $('roomList');
-
-  let rooms;
   try {
-    rooms = (await post(`${P}/api/rooms/list`, { identity: session?.identity })).rooms ?? [];
+    const { data: rooms, error } = await supabase
+      .from('rooms')
+      .select('*')
+      .order('updated_at', { ascending: false });
+
+    if (error) throw error;
+    lobbyRooms = rooms || [];
+
+    const cards = (rooms || []).map((r) => roomCard({
+      id: r.id,
+      name: r.name,
+      owner: r.streamer_id || 'Streamer',
+      streams: r.status === 'live' ? 1 : 0,
+      people: 1,
+    }));
+
+    if (!cards.length) {
+      list.replaceChildren(msgRow('Nenhuma sala aberta no Supabase. Crie a primeira.'));
+      return;
+    }
+
+    list.replaceChildren(...cards);
   } catch (err) {
-    list.replaceChildren(msgRow(`Não foi possível carregar: ${err.message}`));
-    return;
+    list.replaceChildren(msgRow(`Erro ao carregar salas do Supabase: ${err.message}`));
   }
-
-  lobbyRooms = rooms;
-
-  const cards = rooms.map(roomCard);
-
-  if (!cards.length) {
-    list.replaceChildren(msgRow('Nenhuma sala aberta. Crie a primeira.'));
-    return;
-  }
-
-  list.replaceChildren(...cards);
 }
+
 
 function msgRow(text) {
   const el = document.createElement('div');
@@ -1320,31 +1290,11 @@ function roomCard(room) {
   return card;
 }
 
-async function enterRoom(room, password) {
+async function enterRoom(room) {
   if (!session) return;
-
-  try {
-    const tokens = await post(`${P}/api/rooms/join`, {
-      identity: session.identity,
-      roomId: room.id,
-      password: password ?? '',
-    });
-    openRoom(tokens, room);
-  } catch (err) {
-    // 403 numa sala trancada é o caminho normal: pedir a senha.
-    if (err.status === 403 && !password) return askPassword(room);
-    if (err.status === 403) return askPassword(room, 'Senha incorreta.');
-    if (err.status === 429) return askPassword(room, err.detail);
-    if (err.status === 404) {
-      toast('Essa sala já fechou.', true);
-      remove(`sala:${room.id}`);
-      setRoomUrl(null);
-      loadRooms();
-      return;
-    }
-    toast(err.message, true);
-  }
+  openRoom({ roomId: room.id }, room);
 }
+
 
 function askPassword(room, error) {
   joinTarget = room;
