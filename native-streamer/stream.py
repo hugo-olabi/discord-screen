@@ -121,7 +121,8 @@ def main():
                 print(f"  [Audio] Erro ao iniciar captura de áudio: {ea}")
 
         from webrtc_signaling import iniciar_loop_signaling_supabase
-        from config import SUPABASE_URL, SUPABASE_ANON_KEY
+        from supabase_client import SUPABASE_URL, SUPABASE_ANON_KEY
+
 
         whep_srv, porta_real = await iniciar_servidor_whep(3001)
         cf_proc, cf_url = iniciar_tunel_cloudflared(porta_real)
