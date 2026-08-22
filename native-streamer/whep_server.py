@@ -106,17 +106,14 @@ def is_allowed_origin(origin: str) -> bool:
 
 @web.middleware
 async def cors_middleware(request, handler):
-    origin = request.headers.get("Origin", "*")
-    allowed_origin = origin if is_allowed_origin(origin) else "*"
-
     if request.method == "OPTIONS":
         return web.Response(
             status=204,
             headers={
-                "Access-Control-Allow-Origin": allowed_origin,
+                "Access-Control-Allow-Origin": "*",
                 "Access-Control-Allow-Methods": "GET, POST, OPTIONS, PUT, DELETE",
-                "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, X-Requested-With",
-                "Access-Control-Expose-Headers": "Location, Content-Type",
+                "Access-Control-Allow-Headers": "*",
+                "Access-Control-Expose-Headers": "*",
                 "Access-Control-Allow-Private-Network": "true",
             }
         )
@@ -128,12 +125,13 @@ async def cors_middleware(request, handler):
     except Exception as ex:
         response = web.Response(status=500, text=str(ex))
 
-    response.headers["Access-Control-Allow-Origin"] = allowed_origin
+    response.headers["Access-Control-Allow-Origin"] = "*"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS, PUT, DELETE"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, Accept, X-Requested-With"
-    response.headers["Access-Control-Expose-Headers"] = "Location, Content-Type"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+    response.headers["Access-Control-Expose-Headers"] = "*"
     response.headers["Access-Control-Allow-Private-Network"] = "true"
     return response
+
 
 async def iniciar_servidor_whep(porta: int = 3001):
     """Inicia o servidor WebRTC WHEP HTTP na porta especificada."""

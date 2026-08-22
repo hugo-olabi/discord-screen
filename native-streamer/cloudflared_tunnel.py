@@ -26,7 +26,8 @@ def iniciar_tunel_cloudflared(porta: int = 3001) -> tuple[subprocess.Popen | Non
     e retorna (processo, tunnel_url).
     """
     bin_path = obter_caminho_cloudflared()
-    cmd = [bin_path, "tunnel", "--no-autoupdate", "--url", f"http://localhost:{porta}"]
+    cmd = [bin_path, "tunnel", "--no-autoupdate", "--url", f"http://127.0.0.1:{porta}"]
+
 
     try:
         proc = subprocess.Popen(
