@@ -8,7 +8,7 @@
   ],
   "scripts": {
     "dev": "npm -w client run dev",
-    "build": "npm -w client run build",
+    "build": "npm -w client run build && node -e \"import('fs').then(fs => fs.cpSync('client/dist', 'dist', { recursive: true }))\"",
     "preview": "npm -w client run preview",
     "stream": ".venv/bin/python native-streamer/stream.py || python3 native-streamer/stream.py",
     "test": "vitest run",
