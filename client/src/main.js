@@ -1015,13 +1015,18 @@ async function boot() {
 
   if (inDiscord) return entrarNaCall();
 
-  const alvo = new URLSearchParams(location.search).get('sala');
-  const ingresso = params.get('t');
+  const urlParams = new URLSearchParams(location.search);
+  let alvo = urlParams.get('sala') || urlParams.get('t');
 
-  await showLobby();
-  if (ingresso) return abrirPeloIngresso(ingresso);
-  if (session && alvo) await joinById(alvo);
+  if (!alvo) {
+    alvo = crypto.randomUUID().slice(0, 8);
+    urlParams.set('sala', alvo);
+    history.replaceState(null, '', `${location.pathname}?${urlParams.toString()}`);
+  }
+
+  openRoom({ roomId: alvo }, { id: alvo, name: `Sala ${alvo.slice(0, 6)}` });
 }
+
 
 
 /**
@@ -1346,26 +1351,22 @@ function openRoom(tokens, room) {
   setRoomUrl(room.id);
   store(`sala:${room.id}`, JSON.stringify({ tokens, name: room.name }));
 
-  $('lobby').hidden = true;
+  if ($('lobby')) $('lobby').hidden = true;
   $('empty').hidden = false;
   $('share').hidden = false;
-  $('camera').hidden = false;
+  if ($('camera')) $('camera').hidden = true;
   $('people').hidden = false;
   $('loginBtn').hidden = true;
 
-  // Dentro do Discord não há lista para onde voltar nem outra sala com que
-  // confundir esta: quem fecha a atividade é o próprio Discord.
-  $('roomPill').hidden = inDiscord;
-  $('leaveRoom').hidden = inDiscord;
+  $('roomPill').hidden = false;
+  if ($('leaveRoom')) $('leaveRoom').hidden = true;
 
-  clearInterval(lobbyTimer);
-  lobbyTimer = null;
   $('roomPill').textContent = room.name;
 
-  setEmpty('Entrando…', room.name);
-  connect();
+  setEmpty('Aguardando Transmissão Nativa (UDP)...', `ID da Sala: ${room.id}`);
   subscribeViewerToSupabaseRoom(room.id);
 }
+
 
 let viewerSupabaseChannel = null;
 async function subscribeViewerToSupabaseRoom(roomId) {
