@@ -16,45 +16,53 @@ logger = logging.getLogger("whep_server")
 pcs = set()
 active_stream = None
 
+import struct
+
 class FFmpegVideoTrack(MediaStreamTrack):
     kind = "video"
 
     def __init__(self, out_stream=None):
         super().__init__()
         self.out_stream = out_stream or active_stream
-        self.container = None
-        self.packet_gen = None
+        self.codec = av.CodecContext.create("vp8", "r")
+        self.ivf_header_read = False
         self._timestamp = 0
 
-    async def _open_container(self):
+    async def _read_bytes(self, n: int) -> bytes:
         if self.out_stream is None:
-            return None
-        loop = asyncio.get_running_loop()
-        def _open():
-            try:
-                return av.open(self.out_stream, mode="r", format="ivf")
-            except Exception as e:
-                logger.warning(f"PyAV ivf open error: {e}")
-                return None
-        return await loop.run_in_executor(None, _open)
+            return b""
+        try:
+            if hasattr(self.out_stream, "readexactly"):
+                return await self.out_stream.readexactly(n)
+            elif hasattr(self.out_stream, "read"):
+                loop = asyncio.get_running_loop()
+                return await loop.run_in_executor(None, self.out_stream.read, n)
+        except Exception as e:
+            logger.debug(f"Read bytes notice: {e}")
+        return b""
 
     async def recv(self):
-        if self.container is None and self.out_stream is not None:
-            self.container = await self._open_container()
-
-        if self.container:
+        if self.out_stream is not None:
             try:
-                loop = asyncio.get_running_loop()
-                def _next_frame():
-                    for packet in self.container.demux():
-                        for frame in packet.decode():
-                            return frame
-                    return None
-                frame = await loop.run_in_executor(None, _next_frame)
-                if frame:
-                    return frame
+                if not self.ivf_header_read:
+                    hdr32 = await self._read_bytes(32)
+                    if len(hdr32) == 32:
+                        self.ivf_header_read = True
+
+                if self.ivf_header_read:
+                    hdr12 = await self._read_bytes(12)
+                    if len(hdr12) == 12:
+                        frame_size, pts = struct.unpack("<IQ", hdr12)
+                        frame_bytes = await self._read_bytes(frame_size)
+                        if len(frame_bytes) == frame_size:
+                            packet = av.Packet(frame_bytes)
+                            packet.pts = pts
+                            packet.time_base = Fraction(1, 1000)
+                            decoded_frames = self.codec.decode(packet)
+                            if decoded_frames:
+                                return decoded_frames[0]
             except Exception as e:
-                logger.debug(f"Demux decode error: {e}")
+                logger.debug(f"Frame decode notice: {e}")
 
         # Fallback frame
         pts = self._timestamp
@@ -68,6 +76,7 @@ class FFmpegVideoTrack(MediaStreamTrack):
         frame.pts = pts
         frame.time_base = time_base
         return frame
+
 
 class SyntheticVideoTrack(FFmpegVideoTrack):
     pass
