@@ -88,7 +88,7 @@ def set_active_media_track(track):
     global active_track
     active_track = track
 
-def iniciar_servidor_whep(porta: int = 3001):
+async def iniciar_servidor_whep(porta: int = 3001):
     """Inicia o servidor WebRTC WHEP HTTP na porta especificada."""
     app = web.Application()
     app.router.add_options("/{path:.*}", handle_options)
@@ -97,9 +97,9 @@ def iniciar_servidor_whep(porta: int = 3001):
     app.router.add_get("/", lambda req: web.Response(text="WebRTC WHEP Server Active", content_type="text/plain"))
 
     runner = web.AppRunner(app)
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(runner.setup())
+    await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", porta)
-    loop.run_until_complete(site.start())
+    await site.start()
     print(f"  [WebRTC WHEP Server] Servidor WHEP ativo na porta {porta}")
     return runner
+
