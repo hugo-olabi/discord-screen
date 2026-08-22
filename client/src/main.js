@@ -1414,7 +1414,38 @@ function openRoom(tokens, room) {
 
   setEmpty('Entrando…', room.name);
   connect();
+  subscribeViewerToSupabaseRoom(room.id);
 }
+
+let viewerSupabaseChannel = null;
+async function subscribeViewerToSupabaseRoom(roomId) {
+  if (!roomId) return;
+  try {
+    const { data } = await supabase.from('rooms').select('*').eq('id', roomId).maybeSingle();
+    if (data && data.tunnel_url) {
+      toast(`Túnel UDP ativo: ${data.tunnel_url}`);
+    }
+  } catch (err) {
+    console.warn('[Supabase] Error fetching room:', err);
+  }
+
+  if (viewerSupabaseChannel) supabase.removeChannel(viewerSupabaseChannel);
+
+  viewerSupabaseChannel = supabase
+    .channel(`viewer:${roomId}`)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` },
+      (payload) => {
+        const updatedRoom = payload.new;
+        if (updatedRoom && updatedRoom.tunnel_url) {
+          toast(`Túnel UDP ativo: ${updatedRoom.tunnel_url}`);
+        }
+      }
+    )
+    .subscribe();
+}
+
 
 // A limpeza toda — inclusive parar de transmitir — vive em showLobby.
 $('leaveRoom').addEventListener('click', () => showLobby());
