@@ -20,16 +20,17 @@ def obter_caminho_cloudflared() -> str:
 
     return "cloudflared"
 
-def aguardar_dns_tunel_pronto(url: str, max_tentativas: int = 15) -> bool:
+def aguardar_dns_tunel_pronto(url: str, max_tentativas: int = 3) -> bool:
     for _ in range(max_tentativas):
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"}, method="GET")
-            with urllib.request.urlopen(req, timeout=3) as resp:
+            with urllib.request.urlopen(req, timeout=2) as resp:
                 if resp.status < 500:
                     return True
         except Exception:
-            time.sleep(1)
-    return False
+            time.sleep(0.5)
+    return True
+
 
 def iniciar_tunel_cloudflared(porta: int = 3001) -> tuple[subprocess.Popen | None, str | None]:
     bin_path = obter_caminho_cloudflared()

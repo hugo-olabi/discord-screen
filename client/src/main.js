@@ -1372,6 +1372,8 @@ let viewerSupabaseChannel = null;
 let roomPollInterval = null;
 let currentWs = null;
 let currentPlayer = null;
+let reconnectTimeout = null;
+
 
 function connectWebCodecsWebSocket(wsUrl) {
   if (currentWs && (currentWs.readyState === WebSocket.OPEN || currentWs.readyState === WebSocket.CONNECTING)) {
@@ -1391,41 +1393,56 @@ function connectWebCodecsWebSocket(wsUrl) {
     });
   }
 
-  const ws = new WebSocket(wsUrl);
-  ws.binaryType = 'arraybuffer';
-  currentWs = ws;
-
   setEmpty('Conectando WebSocket... ⚡', `Túnel: ${wsUrl}`);
 
-  ws.onopen = () => {
-    setEmpty('Transmissão Nativa Ao Vivo! 🟢', 'WebCodecs ~40ms Direct Streaming');
-    if (container) container.hidden = false;
-    toast('Transmissão Nativa Conectada (~40ms)!');
-  };
+  try {
+    const ws = new WebSocket(wsUrl);
+    ws.binaryType = 'arraybuffer';
+    currentWs = ws;
 
-  ws.onmessage = (evt) => {
-    if (typeof evt.data === 'string') {
-      try {
-        const msg = JSON.parse(evt.data);
-        if (msg.type === 'config' && currentPlayer) {
-          currentPlayer.start(msg.config);
-          if (container) container.hidden = false;
-        }
-      } catch {}
-    } else if (evt.data instanceof ArrayBuffer && currentPlayer) {
-      currentPlayer.push(evt.data);
+    ws.onopen = () => {
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      setEmpty('Transmissão Nativa Ao Vivo! 🟢', 'WebCodecs ~40ms Direct Streaming');
       if (container) container.hidden = false;
-    }
-  };
+      toast('Transmissão Nativa Conectada (~40ms)!');
+    };
 
-  ws.onerror = (err) => {
-    console.warn('[WebSocket error]', err);
-  };
+    ws.onmessage = (evt) => {
+      if (typeof evt.data === 'string') {
+        try {
+          const msg = JSON.parse(evt.data);
+          if (msg.type === 'config' && currentPlayer) {
+            currentPlayer.start(msg.config);
+            if (container) container.hidden = false;
+          }
+        } catch {}
+      } else if (evt.data instanceof ArrayBuffer && currentPlayer) {
+        currentPlayer.push(evt.data);
+        if (container) container.hidden = false;
+      }
+    };
 
-  ws.onclose = () => {
-    setEmpty('Transmissão Encerrada 🔴', 'Aguardando novo início');
-  };
+    ws.onerror = (err) => {
+      console.warn('[WebSocket notice] Conexão aguardando propagação DNS Cloudflare...');
+    };
+
+    ws.onclose = () => {
+      if (currentWs === ws) {
+        currentWs = null;
+        if (reconnectTimeout) clearTimeout(reconnectTimeout);
+        reconnectTimeout = setTimeout(() => {
+          connectWebCodecsWebSocket(wsUrl);
+        }, 1500);
+      }
+    };
+  } catch (err) {
+    if (reconnectTimeout) clearTimeout(reconnectTimeout);
+    reconnectTimeout = setTimeout(() => {
+      connectWebCodecsWebSocket(wsUrl);
+    }, 1500);
+  }
 }
+
 
 async function subscribeViewerToSupabaseRoom(roomId) {
   if (!roomId) return;
