@@ -1373,7 +1373,14 @@ let roomPollInterval = null;
 let peerConnection = null;
 
 async function applyRemoteAnswer(answerSdp) {
-  if (!peerConnection || peerConnection.signalingState !== 'have-local-offer') {
+  if (!peerConnection) return;
+  if (peerConnection.connectionState === 'connected') {
+    setEmpty('Transmissão Nativa WebRTC Ao Vivo! 🟢', 'Conectado via Supabase Direct UDP');
+    const container = document.getElementById('webrtcContainer');
+    if (container) container.hidden = false;
+    return;
+  }
+  if (peerConnection.signalingState !== 'have-local-offer') {
     return;
   }
   try {
@@ -1449,10 +1456,13 @@ async function subscribeViewerToSupabaseRoom(roomId) {
 
     if (roomData.sdp_answer) {
       applyRemoteAnswer(roomData.sdp_answer);
+    } else if (peerConnection && (peerConnection.connectionState === 'connected' || peerConnection.iceConnectionState === 'connected')) {
+      setEmpty('Transmissão Nativa WebRTC Ao Vivo! 🟢', 'Conectado via Supabase Direct UDP');
     } else {
       setEmpty('Aguardando Transmissão Nativa (UDP)...', `ID da Sala: ${roomId}`);
     }
   };
+
 
 
 

@@ -122,10 +122,11 @@ async def iniciar_loop_signaling_supabase(supabase_url: str, anon_key: str, room
                     sdp_offer = room.get("sdp_offer")
                     sdp_answer = room.get("sdp_answer")
 
-                    if sdp_offer and sdp_offer != ultimo_offer_processado and not sdp_answer:
+                    if sdp_offer and sdp_offer != ultimo_offer_processado:
                         print("  [WebRTC Supabase] Novo SDP Offer recebido! Processando WebRTC...")
                         ultimo_offer_processado = sdp_offer
                         answer_sdp = await processar_sdp_offer_nativo(sdp_offer)
+
 
                         # Publica resposta SDP Answer no Supabase
                         update_payload = json.dumps({"sdp_answer": answer_sdp, "status": "live"}).encode("utf-8")
