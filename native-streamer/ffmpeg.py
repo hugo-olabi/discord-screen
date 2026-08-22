@@ -237,8 +237,7 @@ def montar_comando_ffmpeg(fps: int = 30, bitrate: str = "2500k", window_id: str 
     else:
         cmd.extend(["-f", "x11grab", "-framerate", str(fps), "-i", ":0.0"])
 
-    # Filtro mpdecimate remove quadros estáticos duplicados
-    cmd.extend(["-vf", "mpdecimate"])
+
 
     # Selecionar o melhor codec suportado para o container IVF (VP9 > VP8)
     if tem_ffmpeg_encoder("libvpx-vp9"):

@@ -72,7 +72,12 @@ async def streamer_video_loop(out_stream):
     try:
         # 1. Ler cabeçalho IVF (32 bytes)
         hdr32 = await out_stream.readexactly(32)
+        is_vp9 = False
         if len(hdr32) == 32 and hdr32[:4] == b'DKIF':
+            fourcc = hdr32[8:12].decode('ascii', errors='ignore').strip().lower()
+            is_vp9 = 'vp9' in fourcc
+            video_config["codec"] = "vp09.00.10.08" if is_vp9 else "vp8"
+
             width, height = struct.unpack('<HH', hdr32[12:16])
             fps_num, fps_den = struct.unpack('<II', hdr32[16:24])
             video_config["codedWidth"] = width if width > 0 else 1280
@@ -81,13 +86,24 @@ async def streamer_video_loop(out_stream):
 
         start_time = time.time()
         ultimo_pts = -1
+        primeiro_quadro = True
 
         while True:
             hdr12 = await out_stream.readexactly(12)
             frame_size, timestamp = struct.unpack('<IQ', hdr12)
             frame_bytes = await out_stream.readexactly(frame_size)
 
-            is_keyframe = (frame_bytes[0] & 0x01) == 0 if len(frame_bytes) > 0 else False
+            if primeiro_quadro:
+                is_keyframe = True
+                primeiro_quadro = False
+            elif len(frame_bytes) > 0:
+                if is_vp9:
+                    is_keyframe = (frame_bytes[0] & 0x04) == 0
+                else:
+                    is_keyframe = (frame_bytes[0] & 0x01) == 0
+            else:
+                is_keyframe = False
+
             now_pts = int((time.time() - start_time) * 1_000_000)
             if now_pts <= ultimo_pts:
                 now_pts = ultimo_pts + 1
@@ -99,6 +115,7 @@ async def streamer_video_loop(out_stream):
         pass
     except Exception as e:
         logger.debug(f"Loop de vídeo encerrado: {e}")
+
 
 async def iniciar_servidor_ws(porta: int = 3001) -> tuple[web.AppRunner, int]:
     app = web.Application()
