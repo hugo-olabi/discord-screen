@@ -51,3 +51,6 @@ def iniciar_tunel_cloudflared(porta: int = 3001) -> tuple[subprocess.Popen | Non
             break
 
     return proc, url_encontrada
+
+iniciar_tunnel_cloudflared = iniciar_tunel_cloudflared
+
