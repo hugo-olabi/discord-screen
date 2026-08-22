@@ -43,10 +43,12 @@ def obter_pipewire_fd_e_node(timeout_seconds: int = 60) -> tuple[str | None, int
     # 1. Tentar reaproveitar a sessão ativa do Portal Daemon se estiver rodando
     try:
         from portal_daemon import obter_sessao_do_daemon
-        d_node, d_fd = obter_sessao_do_daemon()
-        if d_node:
+        d_res = obter_sessao_do_daemon()
+        if isinstance(d_res, tuple) and len(d_res) >= 2 and d_res[0]:
+            d_node, d_fd = d_res[0], d_res[1]
             sys.stderr.write(f"⚡ Reaproveitando sessão do Portal Daemon: Node #{d_node} (FD #{d_fd})\n")
             return d_node, d_fd, True
+
     except Exception:
         pass
 

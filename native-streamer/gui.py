@@ -101,11 +101,17 @@ class RecordingSetupModal(Gtk.Window):
         
         def request_worker():
             res = obter_pipewire_fd_e_node(timeout_seconds=60)
-            if isinstance(res, tuple) and len(res) == 3:
-                node, fd, is_screen = res
+            if isinstance(res, tuple):
+                if len(res) >= 3:
+                    node, fd, is_screen = res[0], res[1], res[2]
+                elif len(res) == 2:
+                    node, fd, is_screen = res[0], res[1], True
+                else:
+                    node, fd, is_screen = None, None, True
             else:
-                node, fd = res
-                is_screen = True
+                node, fd, is_screen = None, None, True
+
+
 
             def update_ui():
                 if node:

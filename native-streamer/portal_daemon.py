@@ -134,7 +134,12 @@ def iniciar_daemon():
     print("  Por favor, selecione a Janela/Tela na caixa do sistema APENAS UMA VEZ.")
     print("  Depois disso, todos os testes e transmissões usarão este nó instantaneamente!\n")
 
-    node_id, pw_fd = obter_pipewire_fd_e_node(timeout_seconds=120)
+    res = obter_pipewire_fd_e_node(timeout_seconds=120)
+    if isinstance(res, tuple) and len(res) >= 2:
+        node_id, pw_fd = res[0], res[1]
+    else:
+        node_id, pw_fd = None, None
+
 
     if not node_id:
         print("❌ Falha ao obter nó PipeWire do Portal.")

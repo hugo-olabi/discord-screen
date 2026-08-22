@@ -77,14 +77,20 @@ def main():
     selected_window = None
     selected_name = None
     is_screen = True
-
     if not use_noise:
         res = obter_pipewire_fd_e_node()
-        if isinstance(res, tuple) and len(res) == 3:
-            pipewire_node, pipewire_fd, is_screen = res
+
+
+        if isinstance(res, tuple):
+            if len(res) >= 3:
+                pipewire_node, pipewire_fd, is_screen = res[0], res[1], res[2]
+            elif len(res) == 2:
+                pipewire_node, pipewire_fd, is_screen = res[0], res[1], True
+            else:
+                pipewire_node, pipewire_fd, is_screen = None, None, True
         else:
-            pipewire_node, pipewire_fd = res
-            is_screen = True
+            pipewire_node, pipewire_fd, is_screen = None, None, True
+
 
         if pipewire_node:
             print(f"  PipeWire Node #{pipewire_node} (FD {pipewire_fd}) obtido via XDG Desktop Portal! (Tipo: {'Screen' if is_screen else 'Window'})")
