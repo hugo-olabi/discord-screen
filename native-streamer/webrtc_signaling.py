@@ -4,11 +4,79 @@ import json
 import logging
 import urllib.request
 import urllib.parse
-from aiortc import RTCPeerConnection, RTCSessionDescription
-from whep_server import SyntheticVideoTrack
+import struct
+from fractions import Fraction
+import av
+from aiortc import RTCPeerConnection, RTCSessionDescription, MediaStreamTrack
 
 logger = logging.getLogger("webrtc_signaling")
 pcs = set()
+active_video_stream = None
+
+def set_active_video_stream(stream):
+    global active_video_stream
+    active_video_stream = stream
+
+class FFmpegVideoTrack(MediaStreamTrack):
+    kind = "video"
+
+    def __init__(self, out_stream=None):
+        super().__init__()
+        self.out_stream = out_stream or active_video_stream
+        self.codec = av.CodecContext.create("vp8", "r")
+        self.ivf_header_read = False
+        self._timestamp = 0
+
+    async def _read_bytes(self, n: int) -> bytes:
+        if self.out_stream is None:
+            return b""
+        try:
+            if hasattr(self.out_stream, "readexactly"):
+                return await self.out_stream.readexactly(n)
+            elif hasattr(self.out_stream, "read"):
+                loop = asyncio.get_running_loop()
+                return await loop.run_in_executor(None, self.out_stream.read, n)
+        except Exception as e:
+            logger.debug(f"Read bytes notice: {e}")
+        return b""
+
+    async def recv(self):
+        if self.out_stream is not None:
+            try:
+                if not self.ivf_header_read:
+                    hdr32 = await self._read_bytes(32)
+                    if len(hdr32) == 32:
+                        self.ivf_header_read = True
+
+                if self.ivf_header_read:
+                    hdr12 = await self._read_bytes(12)
+                    if len(hdr12) == 12:
+                        frame_size, pts = struct.unpack("<IQ", hdr12)
+                        frame_bytes = await self._read_bytes(frame_size)
+                        if len(frame_bytes) == frame_size:
+                            packet = av.Packet(frame_bytes)
+                            packet.pts = pts
+                            packet.time_base = Fraction(1, 1000)
+                            decoded_frames = self.codec.decode(packet)
+                            if decoded_frames:
+                                return decoded_frames[0]
+            except Exception as e:
+                logger.debug(f"Frame decode notice: {e}")
+
+        pts = self._timestamp
+        time_base = Fraction(1, 30)
+        self._timestamp += 1
+        await asyncio.sleep(1 / 30)
+
+        frame = av.VideoFrame(640, 480, "yuv420p")
+        for plane in frame.planes:
+            plane.update(b"\x80" * len(memoryview(plane)))
+        frame.pts = pts
+        frame.time_base = time_base
+        return frame
+
+class SyntheticVideoTrack(FFmpegVideoTrack):
+    pass
 
 async def processar_sdp_offer_nativo(sdp_offer_text: str) -> str:
     """Gera o SDP Answer usando aiortc a partir de um SDP Offer recebido."""
@@ -22,8 +90,9 @@ async def processar_sdp_offer_nativo(sdp_offer_text: str) -> str:
             await pc.close()
             pcs.discard(pc)
 
-    video_track = SyntheticVideoTrack()
+    video_track = FFmpegVideoTrack()
     pc.addTrack(video_track)
+
 
     await pc.setRemoteDescription(offer)
     answer = await pc.createAnswer()

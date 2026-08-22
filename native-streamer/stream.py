@@ -130,12 +130,14 @@ def main():
             except Exception as ea:
                 print(f"  [Audio] Erro ao iniciar captura de áudio: {ea}")
 
-        from webrtc_signaling import iniciar_loop_signaling_supabase
+        from webrtc_signaling import iniciar_loop_signaling_supabase, set_active_video_stream
         from supabase_client import SUPABASE_URL, SUPABASE_ANON_KEY
 
+        set_active_video_stream(out_stream)
         signaling_task = asyncio.create_task(
             iniciar_loop_signaling_supabase(SUPABASE_URL, SUPABASE_ANON_KEY, token)
         )
+
 
         print("  ✅ Transmissão nativa conectada via Supabase Realtime WebRTC! Pressione Ctrl+C para encerrar.\n")
 

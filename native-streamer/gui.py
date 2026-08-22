@@ -386,15 +386,17 @@ class StreamerAppWindow(Gtk.ApplicationWindow):
                     except Exception as ea:
                         sys.stderr.write(f"\n[Audio] Error starting audio capture: {ea}\n")
 
-                from webrtc_signaling import iniciar_loop_signaling_supabase
+                from webrtc_signaling import iniciar_loop_signaling_supabase, set_active_video_stream
                 from supabase_client import SUPABASE_URL, SUPABASE_ANON_KEY
 
                 GLib.idle_add(lambda: self.val_status.set_text("Live"))
                 GLib.idle_add(lambda: self.val_lag.set_text("< 50ms"))
 
+                set_active_video_stream(out_stream)
                 signaling_task = asyncio.create_task(
                     iniciar_loop_signaling_supabase(SUPABASE_URL, SUPABASE_ANON_KEY, token)
                 )
+
 
                 try:
                     await iniciar_transmissao_websocket(
