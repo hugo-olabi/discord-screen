@@ -91,9 +91,52 @@ def set_active_media_track(track):
     global active_track
     active_track = track
 
+def is_allowed_origin(origin: str) -> bool:
+    if not origin or origin == "*":
+        return True
+    o = origin.lower()
+    if o.startswith("http://localhost:") or o.startswith("http://127.0.0.1:"):
+        return True
+    if o.endswith(".vercel.app") or o == "https://vercel.app":
+        return True
+    if o.endswith(".discordsays.com"):
+        return True
+    return False
+
+@web.middleware
+async def cors_middleware(request, handler):
+    origin = request.headers.get("Origin", "*")
+    allowed_origin = origin if is_allowed_origin(origin) else "*"
+
+    if request.method == "OPTIONS":
+        return web.Response(
+            status=204,
+            headers={
+                "Access-Control-Allow-Origin": allowed_origin,
+                "Access-Control-Allow-Methods": "GET, POST, OPTIONS, PUT, DELETE",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, X-Requested-With",
+                "Access-Control-Expose-Headers": "Location, Content-Type",
+                "Access-Control-Allow-Private-Network": "true",
+            }
+        )
+
+    try:
+        response = await handler(request)
+    except web.HTTPException as ex:
+        response = ex
+    except Exception as ex:
+        response = web.Response(status=500, text=str(ex))
+
+    response.headers["Access-Control-Allow-Origin"] = allowed_origin
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS, PUT, DELETE"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, Accept, X-Requested-With"
+    response.headers["Access-Control-Expose-Headers"] = "Location, Content-Type"
+    response.headers["Access-Control-Allow-Private-Network"] = "true"
+    return response
+
 async def iniciar_servidor_whep(porta: int = 3001):
     """Inicia o servidor WebRTC WHEP HTTP na porta especificada."""
-    app = web.Application()
+    app = web.Application(middlewares=[cors_middleware])
     app.router.add_options("/{path:.*}", handle_options)
     app.router.add_post("/whep", handle_whep_offer)
     app.router.add_post("/", handle_whep_offer)
@@ -105,4 +148,5 @@ async def iniciar_servidor_whep(porta: int = 3001):
     await site.start()
     print(f"  [WebRTC WHEP Server] Servidor WHEP ativo na porta {porta}")
     return runner
+
 
