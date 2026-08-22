@@ -31,27 +31,38 @@ export async function abrirTunel({ aoEndereco = () => {}, rapido = false, gravar
 
   console.log(`${cor.forte}  Iniciando túnel localtunnel para a aplicação web...${cor.fim}`);
 
-  const tunelLt = spawn('npx', ltArgs, {
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  tunelLt.porta = porta;
-  tunelLt.fixo = Boolean(subdomínioFixo);
+  const spawnLt = () => {
+    const proc = spawn('npx', ltArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+    proc.porta = porta;
+    proc.fixo = Boolean(subdomínioFixo);
 
-  let achadoLt = null;
-  const procurarLt = (pedaco) => {
-    const url = pedaco.toString().match(ENDERECO_LT)?.[0];
-    if (!url || url === achadoLt) return;
+    let achadoLt = null;
+    const procurarLt = (pedaco) => {
+      const url = pedaco.toString().match(ENDERECO_LT)?.[0];
+      if (!url || url === achadoLt) return;
 
-    achadoLt = url;
-    if (escrever) gravarEnv({ PUBLIC_ORIGIN: url });
-    anunciar(url, escrever, env.DISCORD_CLIENT_ID);
-    aoEndereco(url);
+      achadoLt = url;
+      if (escrever) gravarEnv({ PUBLIC_ORIGIN: url });
+      anunciar(url, escrever, env.DISCORD_CLIENT_ID);
+      aoEndereco(url);
+    };
+
+    proc.stdout.on('data', procurarLt);
+    proc.stderr.on('data', procurarLt);
+
+    proc.on('exit', (code) => {
+      if (code !== 0 && code !== null) {
+        console.log(`${cor.amarelo}  Túnel localtunnel desconectou. Reconectando em 3s...${cor.fim}`);
+        setTimeout(spawnLt, 3000);
+      }
+    });
+
+    return proc;
   };
 
-  tunelLt.stdout.on('data', procurarLt);
-  tunelLt.stderr.on('data', procurarLt);
-  return tunelLt;
+  return spawnLt();
 }
+
 
 
 function hostnameDoConfig(caminho) {
