@@ -15,9 +15,8 @@ from gi.repository import Gtk, Gdk, GLib
 from janelas import listar_janelas
 from portal import obter_pipewire_fd_e_node
 from ffmpeg import iniciar_processo_captura, iniciar_processo_captura_audio
-from ws_client import iniciar_transmissao_websocket
 from supabase_client import atualizar_url_tunel_supabase
-from cloudflared_tunnel import iniciar_tunel_cloudflared, iniciar_tunnel_cloudflared
+
 
 
 

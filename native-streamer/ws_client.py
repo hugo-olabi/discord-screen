@@ -2,8 +2,8 @@ import asyncio
 import json
 import struct
 import sys
-import time
-import websockets
+import aiohttp
+
 
 def demux_ivf_header(header_bytes: bytes) -> dict | None:
     """
@@ -51,67 +51,66 @@ async def iniciar_transmissao_websocket(server_url: str, token: str, stdout_stre
     slot_idx = 0
 
     try:
-        async with websockets.connect(ws_url) as ws:
-            # 1. Iniciar imediatamente a recepção de mensagens do servidor (slots / need-keyframe)
-            async def loop_mensagens_servidor():
-                nonlocal ultimo_keyframe_packet, slot_idx
-                try:
-                    async for message in ws:
-                        if isinstance(message, str):
-                            data = json.loads(message)
-                            msg_type = data.get("type")
-
-                            if msg_type in ("slot", "welcome"):
-                                slot_idx = data.get("slot", 0)
-
-                            elif msg_type == "need-keyframe" and ultimo_keyframe_packet:
-                                pkt = bytearray(ultimo_keyframe_packet)
-                                pkt[0] = slot_idx & 0xFF
-                                await ws.send(bytes(pkt))
-                except Exception:
-                    pass
-
-            task_rx = asyncio.create_task(loop_mensagens_servidor())
-
-            # 2. Ler cabeçalho IVF de 32 bytes do encoder (GStreamer / FFmpeg)
-            try:
-                header = await stdout_stream.readexactly(32)
-            except asyncio.IncompleteReadError:
-                if proc_stderr:
+        async with aiohttp.ClientSession() as session:
+            async with session.ws_connect(ws_url) as ws:
+                async def loop_mensagens_servidor():
+                    nonlocal ultimo_keyframe_packet, slot_idx
                     try:
-                        if hasattr(proc_stderr, "get_combined_stderr"):
-                            err_msg = await proc_stderr.get_combined_stderr()
-                        else:
-                            err_bytes = await proc_stderr.read()
-                            err_msg = err_bytes.decode('utf-8', errors='ignore').strip()
-                        if err_msg:
-                            sys.stderr.write(f"\n[Detalhes do erro do sistema/encoder]:\n{err_msg}\n\n")
+                        async for msg in ws:
+                            if msg.type == aiohttp.WSMsgType.TEXT:
+                                data = json.loads(msg.data)
+                                msg_type = data.get("type")
+
+                                if msg_type in ("slot", "welcome"):
+                                    slot_idx = data.get("slot", 0)
+
+                                elif msg_type == "need-keyframe" and ultimo_keyframe_packet:
+                                    pkt = bytearray(ultimo_keyframe_packet)
+                                    pkt[0] = slot_idx & 0xFF
+                                    await ws.send_bytes(bytes(pkt))
                     except Exception:
                         pass
-                sys.stderr.write("Aviso: O processo de captura de vídeo encerrou antes de produzir dados.\n")
-                task_rx.cancel()
-                if ao_erro:
-                    ao_erro(Exception("Capture process exited before producing video data."))
-                return
 
-            config = demux_ivf_header(header)
-            if not config:
-                sys.stderr.write("Erro: Stream IVF inválida gerada pelo encoder.\n")
-                task_rx.cancel()
-                if ao_erro:
-                    ao_erro(Exception("Invalid IVF stream from encoder."))
-                return
+                task_rx = asyncio.create_task(loop_mensagens_servidor())
 
-            # 3. Notificar o servidor que a transmissão foi iniciada e enviar as configurações de vídeo
-            await ws.send(json.dumps({"type": "start"}))
-            await ws.send(json.dumps({"type": "config", "config": config}))
+                try:
+                    header = await stdout_stream.readexactly(32)
+                except asyncio.IncompleteReadError:
+                    if proc_stderr:
+                        try:
+                            if hasattr(proc_stderr, "get_combined_stderr"):
+                                err_msg = await proc_stderr.get_combined_stderr()
+                            else:
+                                err_bytes = await proc_stderr.read()
+                                err_msg = err_bytes.decode('utf-8', errors='ignore').strip()
+                            if err_msg:
+                                sys.stderr.write(f"\n[Detalhes do erro do sistema/encoder]:\n{err_msg}\n\n")
+                        except Exception:
+                            pass
+                    sys.stderr.write("Aviso: O processo de captura de vídeo encerrou antes de produzir dados.\n")
+                    task_rx.cancel()
+                    if ao_erro:
+                        ao_erro(Exception("Capture process exited before producing video data."))
+                    return
 
-            task_audio = None
-            if audio_stream and hasattr(audio_stream, 'stdout') and audio_stream.stdout:
-                await ws.send(json.dumps({
-                    "type": "audio-config",
-                    "config": {"codec": "opus", "sampleRate": 48000, "numberOfChannels": 2}
-                }))
+                config = demux_ivf_header(header)
+                if not config:
+                    sys.stderr.write("Erro: Stream IVF inválida gerada pelo encoder.\n")
+                    task_rx.cancel()
+                    if ao_erro:
+                        ao_erro(Exception("Invalid IVF stream from encoder."))
+                    return
+
+                await ws.send_str(json.dumps({"type": "start"}))
+                await ws.send_str(json.dumps({"type": "config", "config": config}))
+
+                task_audio = None
+                if audio_stream and hasattr(audio_stream, 'stdout') and audio_stream.stdout:
+                    await ws.send_str(json.dumps({
+                        "type": "audio-config",
+                        "config": {"codec": "opus", "sampleRate": 48000, "numberOfChannels": 2}
+                    }))
+
 
                 async def loop_audio_envio():
                     nonlocal slot_idx
@@ -131,7 +130,7 @@ async def iniciar_transmissao_websocket(server_url: str, token: str, stdout_stre
                                     now_pts = ultimo_audio_pts + 1
                                 ultimo_audio_pts = now_pts
                                 packet = empacotar_pacote_midia(slot_idx, False, now_pts, chunk, tipo=3)
-                                await ws.send(packet)
+                                await ws.send_bytes(packet)
                                 continue
 
                             num_segments = header[26]
@@ -152,7 +151,7 @@ async def iniciar_transmissao_websocket(server_url: str, token: str, stdout_stre
                                         ultimo_audio_pts = now_pts
 
                                         packet = empacotar_pacote_midia(slot_idx, False, now_pts, bytes(pkt), tipo=3)
-                                        await ws.send(packet)
+                                        await ws.send_bytes(packet)
                                     pkt = bytearray()
                     except Exception:
                         pass
@@ -208,15 +207,15 @@ async def iniciar_transmissao_websocket(server_url: str, token: str, stdout_stre
                         pkt[0] = slot_idx & 0xFF
                         ultimo_keyframe_packet = bytes(pkt)
 
-                    await ws.send(packet_bytes)
+                    await ws.send_bytes(packet_bytes)
 
             except asyncio.IncompleteReadError:
                 pass
             finally:
                 task_rx.cancel()
 
-    except (ConnectionRefusedError, OSError, websockets.exceptions.WebSocketException) as e:
-        sys.stderr.write(f"\n  [Transmissão] Servidor WebSocket local desativado (127.0.0.1:3001). Continuando via Túnel Supabase/Cloudflare.\n")
+    except (ConnectionRefusedError, OSError, aiohttp.ClientError) as e:
+        sys.stderr.write(f"\n  [Transmissão] Servidor WebSocket local desativado (127.0.0.1:3001). Continuando via Supabase Direct UDP.\n")
         try:
             while True:
                 chunk = await stdout_stream.read(65536)
