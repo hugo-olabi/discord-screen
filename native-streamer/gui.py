@@ -359,7 +359,8 @@ class StreamerAppWindow(Gtk.ApplicationWindow):
 
         def run_loop():
             async def run_async():
-                cp, out_stream, _ = await iniciar_processo_captura(
+                cap_res = await iniciar_processo_captura(
+
                     pipewire_node=config.get("pipewire_node"),
                     pipewire_fd=config.get("pipewire_fd"),
                     fps=config.get("fps", 60),
@@ -367,6 +368,12 @@ class StreamerAppWindow(Gtk.ApplicationWindow):
                     window_id=config.get("window_id"),
                     profile="cinema"
                 )
+                if isinstance(cap_res, tuple) and len(cap_res) >= 2:
+                    cp, out_stream = cap_res[0], cap_res[1]
+                else:
+                    GLib.idle_add(lambda: self.val_status.set_text("Video Capture Error"))
+                    return
+
                 self.processo_captura = cp
 
                 audio_proc = None
@@ -384,10 +391,20 @@ class StreamerAppWindow(Gtk.ApplicationWindow):
                 from webrtc_signaling import iniciar_loop_signaling_supabase
                 from supabase_client import SUPABASE_URL, SUPABASE_ANON_KEY
 
+                srv_res = await iniciar_servidor_whep(3001)
+                if isinstance(srv_res, tuple) and len(srv_res) >= 2:
+                    whep_srv, porta_real = srv_res[0], srv_res[1]
+                else:
+                    whep_srv, porta_real = srv_res, 3001
 
-                whep_srv, porta_real = await iniciar_servidor_whep(3001)
-                cf_proc, cf_url = iniciar_tunel_cloudflared(porta_real)
+                cf_res = iniciar_tunel_cloudflared(porta_real)
+                if isinstance(cf_res, tuple) and len(cf_res) >= 2:
+                    cf_proc, cf_url = cf_res[0], cf_res[1]
+                else:
+                    cf_proc, cf_url = None, None
+
                 tunnel_public_url = (cf_url.rstrip("/") + "/whep") if cf_url else server_url
+
 
                 GLib.idle_add(lambda: self.val_status.set_text("Live"))
                 GLib.idle_add(lambda: self.val_lag.set_text("< 50ms"))

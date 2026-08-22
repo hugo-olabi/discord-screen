@@ -116,9 +116,15 @@ def main():
     print(f"  Perfil de Qualidade: {profile.upper()} (Zero-Latency / Static Deduplication)...\n")
 
     async def run():
-        cp, out_stream, _ = await iniciar_processo_captura(
+        cap_res = await iniciar_processo_captura(
             pipewire_node=pipewire_node, pipewire_fd=pipewire_fd, fps=fps or 60, bitrate=bitrate or "12000k", window_id=selected_window, use_noise=use_noise, profile=profile
         )
+        if isinstance(cap_res, tuple) and len(cap_res) >= 2:
+            cp, out_stream = cap_res[0], cap_res[1]
+        else:
+            print("  ❌ Erro ao iniciar processo de captura de vídeo.")
+            return
+
         audio_proc = None
         if stream_audio and not use_noise:
             try:
@@ -129,10 +135,20 @@ def main():
         from webrtc_signaling import iniciar_loop_signaling_supabase
         from supabase_client import SUPABASE_URL, SUPABASE_ANON_KEY
 
+        srv_res = await iniciar_servidor_whep(3001)
+        if isinstance(srv_res, tuple) and len(srv_res) >= 2:
+            whep_srv, porta_real = srv_res[0], srv_res[1]
+        else:
+            whep_srv, porta_real = srv_res, 3001
 
-        whep_srv, porta_real = await iniciar_servidor_whep(3001)
-        cf_proc, cf_url = iniciar_tunel_cloudflared(porta_real)
+        cf_res = iniciar_tunel_cloudflared(porta_real)
+        if isinstance(cf_res, tuple) and len(cf_res) >= 2:
+            cf_proc, cf_url = cf_res[0], cf_res[1]
+        else:
+            cf_proc, cf_url = None, None
+
         tunnel_public_url = (cf_url.rstrip("/") + "/whep") if cf_url else server_url
+
 
         print(f"  [Transmissão] Túnel configurado: {tunnel_public_url}")
         print("  [Supabase] Registrando sala como live no Supabase...")
