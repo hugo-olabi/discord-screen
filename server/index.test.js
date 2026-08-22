@@ -147,6 +147,17 @@ describe('prefixo /.proxy da Activity', () => {
     expect((await get('/.proxy/share.html')).status).toBe(200);
   });
 
+  it('resolve assets empacotados com e sem o prefixo', async () => {
+    expect((await get('/assets/index-9XdboAda.js')).status).toBe(200);
+    expect((await get('/.proxy/assets/index-9XdboAda.js')).status).toBe(200);
+    expect((await get('/assets/index.js')).status).toBe(200);
+    expect((await get('/.proxy/assets/index.js')).status).toBe(200);
+    expect((await get('/assets/index-CYq2zr-t.css')).status).toBe(200);
+    expect((await get('/.proxy/assets/index-CYq2zr-t.css')).status).toBe(200);
+    expect((await get('/assets/index.css')).status).toBe(200);
+    expect((await get('/.proxy/assets/index.css')).status).toBe(200);
+  });
+
   it('a raiz prefixada não vira caminho vazio', async () => {
     // '/.proxy' sozinho viraria '' sem o fallback, e '' não é um caminho válido.
     expect((await get('/.proxy')).status).toBe(200);

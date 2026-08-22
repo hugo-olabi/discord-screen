@@ -31,6 +31,7 @@ export function createAudio({ onError, volume = 1 } = {}) {
   let proximo = 0;
   let nivel = volume;
   let tocou = false;
+  let lastConfig = null;
 
   function start(config) {
     stop();
@@ -40,8 +41,7 @@ export function createAudio({ onError, volume = 1 } = {}) {
       return false;
     }
 
-    // sampleRate igual ao da origem: deixar o navegador reamostrar acrescenta
-    // latência e artefato sem ganho nenhum.
+    lastConfig = config;
     ctx = new AudioContext({ latencyHint: 'interactive', sampleRate: config.sampleRate });
     ganho = ctx.createGain();
     ganho.gain.value = nivel;
@@ -49,9 +49,21 @@ export function createAudio({ onError, volume = 1 } = {}) {
 
     decoder = new AudioDecoder({
       output: agendar,
-      // Pacote corrompido é um estalo, não o fim da transmissão: o próximo
-      // pacote se decodifica sozinho, então não há o que reiniciar.
-      error: (err) => console.warn('[audio]', err.message),
+      error: (err) => {
+        console.warn('[audio]', err.message);
+        try {
+          if (decoder && decoder.state === 'closed' && lastConfig) {
+            decoder = new AudioDecoder({ output: agendar, error: () => {} });
+            decoder.configure({
+              codec: lastConfig.codec,
+              sampleRate: lastConfig.sampleRate,
+              numberOfChannels: lastConfig.numberOfChannels,
+            });
+          }
+        } catch {
+          /* ignorar */
+        }
+      },
     });
 
     try {
@@ -73,14 +85,30 @@ export function createAudio({ onError, volume = 1 } = {}) {
 
   /** Pacote empacotado: [1B slot][1B tipo][8B timestamp][8B envio][payload] */
   function push(buffer) {
-    if (!decoder || decoder.state !== 'configured') return;
+    if (!decoder) return;
+
+    if (decoder.state === 'closed' && lastConfig) {
+      try {
+        decoder = new AudioDecoder({ output: agendar, error: () => {} });
+        decoder.configure({
+          codec: lastConfig.codec,
+          sampleRate: lastConfig.sampleRate,
+          numberOfChannels: lastConfig.numberOfChannels,
+        });
+      } catch {
+        return;
+      }
+    }
+
+    if (decoder.state !== 'configured') return;
 
     const view = new DataView(buffer);
+    const ts = view.getFloat64(2);
     try {
       decoder.decode(
         new EncodedAudioChunk({
           type: 'key', // Todo pacote Opus se decodifica sozinho.
-          timestamp: view.getFloat64(2),
+          timestamp: Math.max(0, Math.round(ts)),
           data: new Uint8Array(buffer, 18),
         }),
       );
@@ -101,22 +129,25 @@ export function createAudio({ onError, volume = 1 } = {}) {
 
     const agora = ctx.currentTime;
 
-    // Fila secou (a rede engasgou): recomeça do presente. Agendar no passado
-    // não atrasa a reprodução — o navegador simplesmente descarta o trecho.
+    // Fila secou (a rede engasgou): recomeça do presente.
     if (proximo < agora + 0.005) proximo = agora + COLCHAO;
-    // Fila cresceu demais: atraso acumulado não se recupera sozinho, e arrastar
-    // o som cada vez mais para trás da imagem é pior que um corte.
+    // Fila cresceu demais: atraso acumulado não se recupera sozinho.
     else if (proximo - agora > ATRASO_MAXIMO) proximo = agora + COLCHAO;
 
     const fonte = ctx.createBufferSource();
     fonte.buffer = buffer;
     fonte.connect(ganho);
+    fonte.onended = () => {
+      try {
+        fonte.disconnect();
+      } catch {
+        /* noop */
+      }
+    };
     fonte.start(proximo);
     proximo += buffer.duration;
     tocou = true;
 
-    // O navegador pode ter criado o contexto suspenso; assistir foi um clique,
-    // então retomar aqui é legítimo e não esbarra na política de autoplay.
     if (ctx.state === 'suspended') ctx.resume().catch(() => {});
   }
 

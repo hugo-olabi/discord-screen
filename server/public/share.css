@@ -200,7 +200,7 @@ video {
 
 @media (min-width: 900px) {
   .fontes {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   }
 
   /* Colunas da mesma altura, com a ação de cada uma encostada na base. Sem

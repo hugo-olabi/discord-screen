@@ -107,6 +107,10 @@ app.use((req, _res, next) => {
     // redirecionamento, e sem atualizar ele mandaria a pessoa de volta ao
     // caminho prefixado — um salto a mais para chegar no mesmo lugar.
     req.originalUrl = req.url;
+    // O Express e o serve-static/parseurl guardam req._parsedUrl em cache na
+    // primeira leitura. Se req.url muda depois, o cache precisa ser limpo,
+    // senão o express.static continua procurando o arquivo sob /.proxy/assets.
+    req._parsedUrl = undefined;
   }
   next();
 });
@@ -839,23 +843,40 @@ app.get('/api/config', (_req, res) => {
   res.json({ clientId: DISCORD_CLIENT_ID || null, asset });
 });
 
-// Activity buildada (produção). Em dev o Vite serve o client na 5173.
+// Activity buildada (produção). Servida de client/dist em tempo de execução.
 const clientDist = path.join(__dirname, '..', 'client', 'dist');
+
+// Alias para caso o navegador ou cache peça style.css em vez de index.css
+app.get('/assets/style.css', (_req, res) => {
+  res.sendFile(path.join(clientDist, 'assets', 'index.css'));
+});
 
 app.use(
   express.static(clientDist, {
     setHeaders: (res, filePath) => {
-      // Arquivos em /assets levam hash de conteúdo no nome — o Vite gera um
-      // nome novo a cada build, então cachear para sempre é seguro.
-      // O index.html aponta para eles e precisa ser sempre fresco.
-      const hashed = filePath.includes(`${path.sep}assets${path.sep}`);
-      res.setHeader('Cache-Control', hashed ? 'public, max-age=31536000, immutable' : 'no-store');
+      // Arquivos HTML e arquivos sem hash no nome nunca são cacheados.
+      const isHtml = filePath.endsWith('.html');
+      const hasHash =
+        filePath.includes(`${path.sep}assets${path.sep}`) && /-[a-zA-Z0-9_-]{8,}\./.test(filePath);
+      if (isHtml || !hasHash) {
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+      } else {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      }
     },
   }),
 );
 
 app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api')) return next();
+  if (
+    req.path.startsWith('/assets/') ||
+    /\.(js|css|png|jpg|jpeg|gif|ico|svg|json|map|wasm|woff2?)$/i.test(req.path)
+  ) {
+    return res.status(404).type('text/plain').send('Asset não encontrado');
+  }
   res.setHeader('Cache-Control', 'no-store');
   res.sendFile(path.join(clientDist, 'index.html'), (err) => err && next());
 });
@@ -896,6 +917,7 @@ server.on('upgrade', (req, socket, head) => {
   const controle = url.searchParams.get('modo') === 'controle';
 
   wss.handleUpgrade(req, socket, head, (ws) => {
+    if (socket.setNoDelay) socket.setNoDelay(true);
     wss.emit('connection', ws, req, payload, fonte, controle);
   });
 });

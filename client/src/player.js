@@ -40,10 +40,17 @@ export function createPlayer(canvas, { onError, onTamanho } = {}) {
     decoder = new VideoDecoder({
       output: draw,
       error: (err) => {
-        // Erro de decodificação normalmente é fluxo fora de sincronia:
-        // pedir um keyframe recupera sem derrubar a sessão.
         console.warn('[decoder]', err.message);
         needKeyframe = true;
+        // Se o decodificador fechou devido a um erro, re-inicializar
+        try {
+          if (decoder && decoder.state === 'closed') {
+            decoder = new VideoDecoder({ output: draw, error: () => {} });
+            decoder.configure(config);
+          }
+        } catch {
+          /* ignorar falha secundária */
+        }
       },
     });
 
@@ -69,6 +76,11 @@ export function createPlayer(canvas, { onError, onTamanho } = {}) {
     // Decoder frio só aceita keyframe; deltas antes disso viram erro.
     if (needKeyframe && !isKeyframe) return;
 
+    // Backpressure: se o decoder acumulou quadros na fila, descartar deltas para voltar ao vivo
+    if (!isKeyframe && decoder.decodeQueueSize > 2) {
+      return;
+    }
+
     const timestamp = view.getFloat64(2);
     const sentAt = view.getFloat64(10);
     lastLagMs = Date.now() - sentAt;
@@ -77,7 +89,7 @@ export function createPlayer(canvas, { onError, onTamanho } = {}) {
       decoder.decode(
         new EncodedVideoChunk({
           type: isKeyframe ? 'key' : 'delta',
-          timestamp,
+          timestamp: Math.max(0, Math.round(timestamp)),
           data: new Uint8Array(buffer, 18),
         }),
       );
@@ -152,13 +164,16 @@ export function createPlayer(canvas, { onError, onTamanho } = {}) {
 
 function deserialize(c) {
   const out = {
-    codec: c.codec,
-    codedWidth: c.codedWidth,
-    codedHeight: c.codedHeight,
-    // Reduz o buffering interno do decoder — sem isso ele acumula alguns
-    // quadros antes de emitir o primeiro.
+    codec: c.codec || 'vp09.00.10.08',
     optimizeForLatency: true,
   };
+
+  if (Number.isInteger(c.codedWidth) && c.codedWidth > 0) {
+    out.codedWidth = c.codedWidth;
+  }
+  if (Number.isInteger(c.codedHeight) && c.codedHeight > 0) {
+    out.codedHeight = c.codedHeight;
+  }
 
   if (c.description) {
     const bin = atob(c.description);

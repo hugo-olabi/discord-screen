@@ -124,6 +124,13 @@ export function fonteIndisponivel(fonte) {
     : 'Este navegador não permite captura de tela. Navegador de celular não suporta captura — use um desktop.';
 }
 
+/** Lista dispositivos de entrada de áudio (microfones / cabos virtuais) disponíveis. */
+export async function listarMicrofones() {
+  if (!navigator.mediaDevices?.enumerateDevices) return [];
+  const devs = await navigator.mediaDevices.enumerateDevices();
+  return devs.filter((d) => d.kind === 'audioinput');
+}
+
 /**
  * @param {object} opts
  * @param {string} opts.wsUrl        endpoint do relay, com o token de transmissor
@@ -161,6 +168,11 @@ export function createBroadcaster({
   // Pediram som, mas a superfície escolhida traria o Discord junto. Guardado
   // para a interface poder oferecer a saída em vez de só avisar e esquecer.
   let somBloqueado = false;
+  let screenAudioTrack = null;
+  let micStream = null;
+  let micTrack = null;
+  let micDeviceId = null;
+  let mixCtx = null;
   let video = null;
   let config = null;
   let stage = null;
@@ -242,8 +254,8 @@ export function createBroadcaster({
     pump(track);
     // Pedir áudio não garante receber: em vários sistemas a caixa "compartilhar
     // o som" fica desmarcada, e o navegador devolve a tela sem faixa de som.
-    const audioTrack = prepararSom(track, stream);
-    if (audioTrack) pumpAudio(audioTrack);
+    screenAudioTrack = prepararSom(track, stream);
+    await reiniciarAudio();
 
     return stream;
   }
@@ -298,7 +310,7 @@ export function createBroadcaster({
    *
    * O par pedido é sempre o mesmo, porque a superfície só se conhece depois da
    * escolha: escopar o som à janela e recusar a mistura do sistema. É o mesmo
-   * veto do prepararSom, aplicado antes de o som existir — quem escolhe a tela
+   * veto do prepararSom, applied antes de o som existir — quem escolhe a tela
    * inteira volta sem faixa nenhuma, em vez de com uma que precisa ser morta.
    */
   const opcoesCaptura = (over) => opcoesTela({ fps, comSom: audio, ...over });
@@ -433,8 +445,64 @@ export function createBroadcaster({
       );
     }
 
-    // Encerra o laço anterior antes de abrir outro, senão os dois alimentam o
-    // mesmo encoder e a fila estoura.
+    somBloqueado = false;
+    screenAudioTrack = faixa;
+    faixa.addEventListener('ended', () => onAviso?.('A fonte do som foi fechada.'));
+    await reiniciarAudio();
+    return faixa;
+  }
+
+  /**
+   * Liga o microfone (físico ou virtual) para a transmissão.
+   *
+   * Se já houver um microfone ativo, ele é substituído. Se o som da tela
+   * também estiver ativo, ambos são misturados via AudioContext.
+   */
+  async function ligarMicrofone(id = micDeviceId) {
+    desligarMicrofone(false);
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error('Este navegador não permite acesso ao microfone.');
+    }
+
+    const constraints = {
+      audio: id ? { deviceId: { exact: id } } : true,
+    };
+
+    const s = await navigator.mediaDevices.getUserMedia(constraints);
+    micStream = s;
+    micTrack = s.getAudioTracks()[0];
+    micDeviceId = id ?? micTrack?.getSettings?.().deviceId ?? null;
+
+    micTrack?.addEventListener('ended', () => {
+      desligarMicrofone();
+      onAviso?.('O microfone foi desligado.');
+    });
+
+    await reiniciarAudio();
+    return micTrack;
+  }
+
+  function desligarMicrofone(reiniciar = true) {
+    micTrack?.stop();
+    micStream?.getTracks().forEach((t) => t.stop());
+    micTrack = null;
+    micStream = null;
+    micDeviceId = null;
+
+    if (reiniciar) {
+      reiniciarAudio().catch(() => {});
+    }
+  }
+
+  function faixaViva(faixa) {
+    if (!faixa) return false;
+    if (faixa.parada) return false;
+    if ('readyState' in faixa && faixa.readyState !== 'live') return false;
+    return true;
+  }
+
+  async function reiniciarAudio() {
     await audioReader?.cancel().catch(() => {});
     audioReader = null;
     if (audioEncoder?.state === 'configured') {
@@ -445,11 +513,41 @@ export function createBroadcaster({
       }
     }
     audioEncoder = null;
+    mixCtx?.close().catch(() => {});
+    mixCtx = null;
 
-    somBloqueado = false;
-    faixa.addEventListener('ended', () => onAviso?.('A fonte do som foi fechada.'));
-    pumpAudio(faixa);
-    return faixa;
+    if (!running) return;
+
+    const telaViva = faixaViva(screenAudioTrack);
+    const micVivo = faixaViva(micTrack);
+
+    let faixaFinal = null;
+
+    if (telaViva && micVivo) {
+      if (window.AudioContext) {
+        try {
+          mixCtx = new AudioContext({ sampleRate: 48_000 });
+          const dest = mixCtx.createMediaStreamDestination();
+          const src1 = mixCtx.createMediaStreamSource(new MediaStream([screenAudioTrack]));
+          const src2 = mixCtx.createMediaStreamSource(new MediaStream([micTrack]));
+          src1.connect(dest);
+          src2.connect(dest);
+          faixaFinal = dest.stream.getAudioTracks()[0];
+        } catch {
+          faixaFinal = micTrack || screenAudioTrack;
+        }
+      } else {
+        faixaFinal = micTrack || screenAudioTrack;
+      }
+    } else if (micVivo) {
+      faixaFinal = micTrack;
+    } else if (telaViva) {
+      faixaFinal = screenAudioTrack;
+    }
+
+    if (faixaFinal) {
+      pumpAudio(faixaFinal);
+    }
   }
 
   // -------------------------------------------------------------------- áudio
@@ -839,10 +937,8 @@ export function createBroadcaster({
     }
 
     // A tela nova traz a própria faixa de som; a antiga morreu com o stream.
-    await audioReader?.cancel().catch(() => {});
-    audioReader = null;
-    const novoAudio = prepararSom(track, fresh);
-    if (novoAudio && audioEncoder) pumpAudio(novoAudio);
+    screenAudioTrack = prepararSom(track, fresh);
+    await reiniciarAudio();
 
     return fresh;
   }
@@ -868,6 +964,11 @@ export function createBroadcaster({
   const getSettings = () => ({ bitrate, fps });
 
   function cleanup() {
+    desligarMicrofone(false);
+    screenAudioTrack?.stop();
+    screenAudioTrack = null;
+    mixCtx?.close().catch(() => {});
+    mixCtx = null;
     stream?.getTracks().forEach((t) => t.stop());
     stream = null;
     video?.remove();
@@ -915,10 +1016,14 @@ export function createBroadcaster({
     stop,
     changeScreen,
     trocarSom,
+    ligarMicrofone,
+    desligarMicrofone,
     setQuality,
     getSettings,
     temSom: () => Boolean(audioEncoder),
     somBloqueado: () => somBloqueado,
+    microfoneAtivo: () => faixaViva(micTrack),
+    microfoneDeviceId: () => micDeviceId,
     isRunning: () => running,
   };
 }

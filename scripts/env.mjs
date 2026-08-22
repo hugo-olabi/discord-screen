@@ -38,9 +38,11 @@ const CONHECIDAS = [
   'DISCORD_CLIENT_ID',
   'DISCORD_CLIENT_SECRET',
   'DISCORD_BOT_TOKEN',
+  'DISCORD_USER_TOKEN',
   'DISCORD_ADMIN_ID',
   'NODE_ENV',
   'TUNEL_CONFIG',
+  'FIXED_SUBDOMAIN',
 ];
 
 /**
@@ -83,6 +85,9 @@ export function gravarEnv(novos) {
     '# O bot também precisa estar no servidor.',
     `DISCORD_BOT_TOKEN=${v.DISCORD_BOT_TOKEN ?? ''}`,
     '',
+    '# Token de usuário do Discord para atualizar o URL Mappings Target automaticamente.',
+    `DISCORD_USER_TOKEN=${v.DISCORD_USER_TOKEN ?? ''}`,
+    '',
     '# ID da SUA CONTA do Discord. Não é o Client ID nem o ID do servidor:',
     '# os três são números parecidos, e o errado só falha na hora de entrar.',
     '# Ligue o Modo desenvolvedor (Configurações, Avançado), botão direito no',
@@ -92,9 +97,12 @@ export function gravarEnv(novos) {
     '# Deixe "production" quando publicar de verdade.',
     `NODE_ENV=${v.NODE_ENV ?? 'development'}`,
     '',
-    '# Túnel com endereço fixo. Vazio = o túnel criado é descartável, com',
-    '# endereço novo a cada vez (e aí o Target no Discord muda junto).',
+    '# Túnel com endereço fixo via Cloudflare.',
     `TUNEL_CONFIG=${v.TUNEL_CONFIG ?? ''}`,
+    '',
+    '# Subdomínio Fixo Gratuito (ex: discord-screen-seu-nome).',
+    '# Mantém o endereço fixo para você não precisar trocar o Target no Discord nunca mais!',
+    `FIXED_SUBDOMAIN=${v.FIXED_SUBDOMAIN ?? ''}`,
     '',
   ];
 

@@ -17,6 +17,8 @@
     "start": "npm run build && npm -w server run start",
     "start:fast": "node scripts/start-fast.mjs",
     "build": "npm -w client run build",
+    "stream": ".venv/bin/python native-streamer/stream.py || python3 native-streamer/stream.py",
+    "portal-daemon": ".venv/bin/python native-streamer/portal_daemon.py || python3 native-streamer/portal_daemon.py",
     "smoke": "node scripts/smoke.mjs",
     "smoke:controle": "node scripts/smoke-controle.mjs",
     "smoke:admin": "node scripts/admin-smoke.mjs",

@@ -106,6 +106,34 @@
 
           <p id="camera-status" class="status" role="status"></p>
         </section>
+
+        <section class="bloco" id="bloco-microfone">
+          <h2>Microfone</h2>
+
+          <div id="mic-setup">
+            <p class="note" id="mic-nota">
+              Transmita voz ou áudio de aplicativos via microfone ou microfone virtual (ex: VB-Audio Cable).
+            </p>
+
+            <div class="acao">
+              <button id="mic-toggle" class="primary">Ligar o microfone</button>
+              <button
+                id="mic-escolher"
+                class="primary seta"
+                title="Escolher o microfone"
+                aria-label="Escolher o microfone"
+                aria-haspopup="menu"
+                aria-expanded="false"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6" /></svg>
+              </button>
+
+              <ul id="mic-menu" class="menu" role="menu" hidden></ul>
+            </div>
+          </div>
+
+          <p id="mic-status" class="status" role="status"></p>
+        </section>
       </div>
 
       <footer>

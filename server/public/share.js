@@ -18,6 +18,7 @@ import {
   supportError,
   fonteIndisponivel,
   opcoesTela,
+  listarMicrofones,
 } from '/shared/broadcaster.js?v=7';
 
 const $ = (id) => document.getElementById(id);
@@ -408,6 +409,16 @@ function criarPainel(fonte) {
 
     try {
       const stream = await broadcaster.start();
+      if (micStreamLocal || micDispositivo) {
+        micStreamLocal?.getTracks().forEach((t) => t.stop());
+        micStreamLocal = null;
+        try {
+          await broadcaster.ligarMicrofone(micDispositivo);
+          setMicStatus('Microfone ativo no ao vivo.', 'ok');
+        } catch (err) {
+          setMicStatus(`Erro ao ativar microfone: ${err.message}`, 'error');
+        }
+      }
       el('preview').srcObject = stream;
       el('preview')
         .play()
@@ -472,6 +483,7 @@ function criarPainel(fonte) {
       pararPrevia();
     },
     trocarSom: () => broadcaster?.trocarSom(),
+    getBroadcaster: () => broadcaster,
   };
 }
 
@@ -514,6 +526,143 @@ $('somAba').addEventListener('click', async () => {
   }
 });
 
+// ------------------------------------------------------------- microfone
+
+let micStreamLocal = null;
+let micDispositivo = null;
+
+function setMicStatus(msg, kind = '') {
+  const alvo = $('mic-status');
+  if (!alvo) return;
+  alvo.textContent = msg;
+  alvo.className = `status ${kind}`;
+}
+
+function fecharMicMenu() {
+  $('mic-menu').hidden = true;
+  $('mic-escolher').setAttribute('aria-expanded', 'false');
+}
+
+async function listarEMostrarMicrofones() {
+  let mics = await listarMicrofones();
+
+  if (mics.length && !mics[0].label) {
+    try {
+      const temp = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mics = await listarMicrofones();
+      temp.getTracks().forEach((t) => t.stop());
+    } catch {
+      // Permissão negada ou ignorada
+    }
+  }
+
+  if (!mics.length) {
+    setMicStatus('Nenhum microfone encontrado neste computador.', 'error');
+    return;
+  }
+
+  $('mic-menu').replaceChildren(
+    ...mics.map((d, i) => {
+      const li = document.createElement('li');
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.setAttribute('role', 'menuitemradio');
+      b.setAttribute('aria-checked', String(d.deviceId === micDispositivo));
+      b.textContent = d.label || `Microfone ${i + 1}`;
+      b.addEventListener('click', () => {
+        fecharMicMenu();
+        ligarMic(d.deviceId);
+      });
+      li.append(b);
+      return li;
+    }),
+  );
+}
+
+async function escolherMic() {
+  if (!$('mic-menu').hidden) return fecharMicMenu();
+  await listarEMostrarMicrofones();
+  if (!$('mic-menu').childElementCount) return;
+  $('mic-menu').hidden = false;
+  $('mic-escolher').setAttribute('aria-expanded', 'true');
+}
+
+function obterBroadcasterAtivo() {
+  if (paineis.tela?.ativo()) return paineis.tela.getBroadcaster();
+  if (paineis.camera?.ativo()) return paineis.camera.getBroadcaster();
+  return null;
+}
+
+async function ligarMic(id = micDispositivo) {
+  setMicStatus('Abrindo o microfone…');
+  try {
+    const activeBroadcaster = obterBroadcasterAtivo();
+
+    if (activeBroadcaster) {
+      const track = await activeBroadcaster.ligarMicrofone(id);
+      micDispositivo = activeBroadcaster.microfoneDeviceId();
+      const label = track?.label || 'Microfone';
+      setMicStatus(`Microfone ativo: ${label}`, 'ok');
+    } else {
+      micStreamLocal?.getTracks().forEach((t) => t.stop());
+      const s = await navigator.mediaDevices.getUserMedia({
+        audio: id ? { deviceId: { exact: id } } : true,
+      });
+      micStreamLocal = s;
+      const track = s.getAudioTracks()[0];
+      micDispositivo = id ?? track?.getSettings?.().deviceId ?? null;
+      const label = track?.label || 'Microfone';
+      setMicStatus(`Microfone pronto: ${label} (será transmitido ao iniciar)`, 'ok');
+    }
+
+    $('mic-toggle').textContent = 'Desligar o microfone';
+    $('mic-toggle').className = 'danger';
+  } catch (err) {
+    setMicStatus(
+      err.name === 'NotAllowedError'
+        ? 'Acesso ao microfone negado. Libere a permissão no navegador.'
+        : err.message,
+      'error',
+    );
+  }
+}
+
+function desligarMic() {
+  const activeBroadcaster = obterBroadcasterAtivo();
+  if (activeBroadcaster) {
+    activeBroadcaster.desligarMicrofone();
+  }
+  micStreamLocal?.getTracks().forEach((t) => t.stop());
+  micStreamLocal = null;
+  micDispositivo = null;
+
+  $('mic-toggle').textContent = 'Ligar o microfone';
+  $('mic-toggle').className = 'primary';
+  setMicStatus('Microfone desligado.');
+}
+
+function micEstaAtivo() {
+  const activeBroadcaster = obterBroadcasterAtivo();
+  if (activeBroadcaster) return activeBroadcaster.microfoneAtivo();
+  return Boolean(micStreamLocal && micStreamLocal.getAudioTracks()[0]?.readyState === 'live');
+}
+
+$('mic-toggle')?.addEventListener('click', () => {
+  if (micEstaAtivo()) desligarMic();
+  else ligarMic();
+});
+
+$('mic-escolher')?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  escolherMic().catch((err) => setMicStatus(err.message, 'error'));
+});
+
+document.addEventListener('click', fecharMicMenu);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') fecharMicMenu();
+});
+
 window.addEventListener('beforeunload', () => {
+  desligarMic();
   for (const f of FONTES) paineis[f]?.parar();
 });

@@ -136,23 +136,42 @@ function initials(name) {
 
 /** Todas as transmissões de uma pessoa — hoje até duas: a tela e a câmera. */
 const slotsOf = (userId) =>
-  [...available.entries()].filter(([, a]) => a.userId === userId).map(([slot]) => slot);
+  [...available.entries()]
+    .filter(([, a]) => String(a.userId) === String(userId))
+    .map(([slot]) => Number(slot));
 
 /**
  * O que o grid desenha: uma entrada por transmissão, mais uma por pessoa que
  * não está transmitindo.
- *
- * Antes era uma entrada por pessoa, com o slot deduzido dela. Bastava enquanto
- * ninguém podia ter duas — a partir da câmera, a segunda transmissão
- * simplesmente não aparecia, e o motivo não ficava visível em lugar nenhum.
  */
 function entradasDoGrid() {
   const saida = [];
   for (const p of participants) {
     const slots = p.broadcasting ? slotsOf(p.id) : [];
-    if (!slots.length) saida.push({ p, slot: null });
-    else for (const slot of slots) saida.push({ p, slot });
+    if (!slots.length) {
+      const orfao = [...available.entries()].find(([, a]) => String(a.userId) === String(p.id));
+      if (orfao) {
+        saida.push({ p, slot: Number(orfao[0]) });
+      } else {
+        saida.push({ p, slot: null });
+      }
+    } else {
+      for (const slot of slots) saida.push({ p, slot: Number(slot) });
+    }
   }
+
+  for (const [slot, a] of available.entries()) {
+    const numSlot = Number(slot);
+    if (!saida.some((e) => Number(e.slot) === numSlot)) {
+      const p = participants.find((p) => String(p.id) === String(a.userId)) ?? {
+        id: a.userId,
+        name: 'Transmissor',
+        broadcasting: true,
+      };
+      saida.push({ p, slot: numSlot });
+    }
+  }
+
   return saida;
 }
 
@@ -356,7 +375,7 @@ function renderGrid() {
   }
 
   const dono = available.get(activeSlot)?.userId;
-  const emCena = participants.find((p) => p.id === dono) ?? {
+  const emCena = participants.find((p) => String(p.id) === String(dono)) ?? {
     id: dono ?? 'desconhecido',
     name: 'Transmitindo',
     broadcasting: true,
@@ -441,26 +460,18 @@ function contagemPessoas() {
  * disputem o único canvas daquela transmissão.
  */
 function buildTile(p, { palco = false, semVideo = false, slot: slotDado = null } = {}) {
-  // O slot é obrigatório para quem quer vídeo, e não deduzido da pessoa: com
-  // duas fontes por pessoa não existe "a transmissão dela". Quem passa
-  // `semVideo` quer só o avatar, e aí não há slot para acertar.
-  const slot = p.broadcasting && !semVideo ? slotDado : null;
+  const slot = p.broadcasting && !semVideo ? (slotDado !== null ? Number(slotDado) : null) : null;
   const stream = slot !== null ? streams.get(slot) : null;
-  const isMe = p.id === session?.user?.id;
+  const isMe = String(p.id) === String(session?.user?.id);
 
   const tile = document.createElement('div');
   tile.className = p.broadcasting ? 'tile sharing' : 'tile';
   if (palco) tile.classList.add('tile-palco');
 
-  // Com a forma do vídeo no próprio tile, a moldura passa a abraçar a imagem.
-  // Sem isto, uma tela 16:9 dentro de um palco largo e baixo encolhia até caber
-  // na altura e sobrava um retângulo preto ocupando metade da área.
   if (palco && stream?.canvas.width) {
     tile.style.aspectRatio = `${stream.canvas.width} / ${stream.canvas.height}`;
   }
 
-  // Sem rótulo, dois tiles da mesma pessoa lado a lado no grid não se
-  // distinguem até alguém clicar em um deles.
   if (slot !== null && available.get(slot)?.fonte === 'camera') {
     const marca = document.createElement('span');
     marca.className = 'tile-fonte';
@@ -469,8 +480,16 @@ function buildTile(p, { palco = false, semVideo = false, slot: slotDado = null }
   }
 
   const aoClicar = () => {
-    if (palco) telaCheia = !telaCheia;
-    else activeSlot = slot;
+    if (palco) {
+      if (stream) {
+        telaCheia = !telaCheia;
+      } else if (slot !== null) {
+        watchSlot(slot);
+        return;
+      }
+    } else if (slot !== null) {
+      activeSlot = slot;
+    }
     renderGrid();
   };
 
@@ -482,18 +501,13 @@ function buildTile(p, { palco = false, semVideo = false, slot: slotDado = null }
         : 'Clique para ver em tela cheia'
       : 'Clique para ver em destaque';
     tile.addEventListener('click', aoClicar);
-    // Botão direito para largar a tela, sem precisar caçar controle.
     tile.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       openTileMenu(e.clientX, e.clientY, slot, p.name);
     });
 
-    // Entre pedir para assistir e o primeiro quadro chegar existe uma espera
-    // real: sem este aviso ela é indistinguível de um travamento.
     if (!stream.started) tile.append(buildLoading());
 
-    // O clique direito pode ser capturado pelo cliente do Discord antes de
-    // chegar aqui, então o botão visível é o caminho garantido.
     const stop = document.createElement('button');
     stop.className = 'tile-stop';
     stop.dataset.tip = 'Parar de assistir';
@@ -506,8 +520,7 @@ function buildTile(p, { palco = false, semVideo = false, slot: slotDado = null }
     });
     tile.append(stop);
   } else if (slot !== null) {
-    // O convite tem botão próprio, que para o clique antes de chegar no tile.
-    if (!palco) tile.addEventListener('click', aoClicar);
+    tile.addEventListener('click', aoClicar);
     tile.append(buildWatchPrompt(slot, p.name, isMe));
   } else {
     tile.append(buildAvatar(p));

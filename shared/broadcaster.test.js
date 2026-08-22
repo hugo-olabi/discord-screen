@@ -10,7 +10,12 @@
  * uma faixa de som que traria o Discord de volta em eco, e o que sai no fio.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createBroadcaster, fonteIndisponivel, supportError } from './broadcaster.js';
+import {
+  createBroadcaster,
+  fonteIndisponivel,
+  supportError,
+  listarMicrofones,
+} from './broadcaster.js';
 
 // ------------------------------------------------------------------- dublês
 
@@ -262,6 +267,11 @@ function montarNavegador({ sem = [], restrictOwnAudio = true } = {}) {
             return proximaCaptura();
           })
         : undefined,
+      enumerateDevices: vi.fn(async () => [
+        { kind: 'audioinput', deviceId: 'mic-1', label: 'Microfone 1' },
+        { kind: 'audioinput', deviceId: 'mic-virtual', label: 'Cabo Virtual' },
+        { kind: 'videoinput', deviceId: 'cam-1', label: 'Webcam' },
+      ]),
       getSupportedConstraints: () => (restrictOwnAudio ? { restrictOwnAudio: true } : {}),
     },
   });
@@ -976,5 +986,35 @@ describe('sem MediaStreamTrackProcessor', () => {
 
     b.stop();
     expect(document.querySelector('video')).toBeNull();
+  });
+});
+
+describe('microfone', () => {
+  it('lista dispositivos de entrada de áudio', async () => {
+    montarNavegador();
+    const mics = await listarMicrofones();
+    expect(mics).toHaveLength(2);
+    expect(mics[0].label).toBe('Microfone 1');
+    expect(mics[1].deviceId).toBe('mic-virtual');
+  });
+
+  it('liga e desliga o microfone durante a transmissão', async () => {
+    montarNavegador();
+    const { b } = await noAr();
+
+    const micAudioTrack = new FaixaFalsa('audio', { deviceId: 'mic-virtual', sampleRate: 48000 });
+    prepararCaptura(new StreamFalsa(null, micAudioTrack));
+
+    expect(b.microfoneAtivo()).toBe(false);
+
+    await b.ligarMicrofone('mic-virtual');
+    expect(b.microfoneAtivo()).toBe(true);
+    expect(b.microfoneDeviceId()).toBe('mic-virtual');
+
+    b.desligarMicrofone();
+    expect(b.microfoneAtivo()).toBe(false);
+    expect(micAudioTrack.parada).toBe(true);
+
+    b.stop();
   });
 });
