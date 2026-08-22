@@ -32,10 +32,11 @@ class SyntheticVideoTrack(MediaStreamTrack):
         # Create 640x480 test frame
         frame = av.VideoFrame(640, 480, "yuv420p")
         for plane in frame.planes:
-            plane.update(b"\x80" * len(plane))
+            plane.update(b"\x80" * len(memoryview(plane)))
         frame.pts = pts
         frame.time_base = time_base
         return frame
+
 
 
 async def handle_options(request):
