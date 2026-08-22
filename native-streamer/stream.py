@@ -132,10 +132,12 @@ def main():
             except Exception as ea:
                 print(f"  [Audio] Erro ao iniciar captura de áudio: {ea}")
 
-        from webrtc_signaling import iniciar_loop_signaling_supabase
+        from whep_server import iniciar_servidor_whep, set_active_media_stream
         from supabase_client import SUPABASE_URL, SUPABASE_ANON_KEY
 
+        set_active_media_stream(out_stream)
         srv_res = await iniciar_servidor_whep(3001)
+
         if isinstance(srv_res, tuple) and len(srv_res) >= 2:
             whep_srv, porta_real = srv_res[0], srv_res[1]
         else:

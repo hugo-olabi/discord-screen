@@ -14,28 +14,73 @@ logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger("whep_server")
 
 pcs = set()
-active_track = None
+active_stream = None
 
-class SyntheticVideoTrack(MediaStreamTrack):
+class FFmpegVideoTrack(MediaStreamTrack):
     kind = "video"
 
-    def __init__(self):
+    def __init__(self, out_stream=None):
         super().__init__()
+        self.out_stream = out_stream or active_stream
+        self.container = None
+        self.packet_gen = None
         self._timestamp = 0
 
+    async def _open_container(self):
+        if self.out_stream is None:
+            return None
+        loop = asyncio.get_running_loop()
+        def _open():
+            try:
+                return av.open(self.out_stream, mode="r", format="ivf")
+            except Exception as e:
+                logger.warning(f"PyAV ivf open error: {e}")
+                return None
+        return await loop.run_in_executor(None, _open)
+
     async def recv(self):
+        if self.container is None and self.out_stream is not None:
+            self.container = await self._open_container()
+
+        if self.container:
+            try:
+                loop = asyncio.get_running_loop()
+                def _next_frame():
+                    for packet in self.container.demux():
+                        for frame in packet.decode():
+                            return frame
+                    return None
+                frame = await loop.run_in_executor(None, _next_frame)
+                if frame:
+                    return frame
+            except Exception as e:
+                logger.debug(f"Demux decode error: {e}")
+
+        # Fallback frame
         pts = self._timestamp
         time_base = Fraction(1, 30)
         self._timestamp += 1
         await asyncio.sleep(1 / 30)
 
-        # Create 640x480 test frame
         frame = av.VideoFrame(640, 480, "yuv420p")
         for plane in frame.planes:
             plane.update(b"\x80" * len(memoryview(plane)))
         frame.pts = pts
         frame.time_base = time_base
         return frame
+
+class SyntheticVideoTrack(FFmpegVideoTrack):
+    pass
+
+def set_active_media_stream(stream):
+    global active_stream, active_track
+    active_stream = stream
+    active_track = FFmpegVideoTrack(stream)
+
+def set_active_media_track(track):
+    global active_track
+    active_track = track
+
 
 
 
