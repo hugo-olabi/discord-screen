@@ -387,30 +387,11 @@ class StreamerAppWindow(Gtk.ApplicationWindow):
                     except Exception as ea:
                         sys.stderr.write(f"\n[Audio] Error starting audio capture: {ea}\n")
 
-                from whep_server import iniciar_servidor_whep, set_active_media_stream
                 from webrtc_signaling import iniciar_loop_signaling_supabase
                 from supabase_client import SUPABASE_URL, SUPABASE_ANON_KEY
 
-                set_active_media_stream(out_stream)
-                srv_res = await iniciar_servidor_whep(3001)
-
-                if isinstance(srv_res, tuple) and len(srv_res) >= 2:
-                    whep_srv, porta_real = srv_res[0], srv_res[1]
-                else:
-                    whep_srv, porta_real = srv_res, 3001
-
-                cf_res = iniciar_tunel_cloudflared(porta_real)
-                if isinstance(cf_res, tuple) and len(cf_res) >= 2:
-                    cf_proc, cf_url = cf_res[0], cf_res[1]
-                else:
-                    cf_proc, cf_url = None, None
-
-                tunnel_public_url = (cf_url.rstrip("/") + "/whep") if cf_url else server_url
-
-
                 GLib.idle_add(lambda: self.val_status.set_text("Live"))
                 GLib.idle_add(lambda: self.val_lag.set_text("< 50ms"))
-                atualizar_url_tunel_supabase(token, tunnel_public_url, status="live")
 
                 signaling_task = asyncio.create_task(
                     iniciar_loop_signaling_supabase(SUPABASE_URL, SUPABASE_ANON_KEY, token)
@@ -422,12 +403,7 @@ class StreamerAppWindow(Gtk.ApplicationWindow):
                     )
                 finally:
                     signaling_task.cancel()
-                    if cf_proc:
-                        try: cf_proc.terminate()
-                        except Exception: pass
 
-                        try: cf_proc.terminate()
-                        except Exception: pass
 
 
             try:

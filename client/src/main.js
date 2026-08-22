@@ -1371,76 +1371,23 @@ function openRoom(tokens, room) {
 let viewerSupabaseChannel = null;
 let roomPollInterval = null;
 let peerConnection = null;
-let currentWhepUrl = null;
 
-async function connectWebRTCWHEP(whepUrl) {
-  if (currentWhepUrl === whepUrl && peerConnection && (peerConnection.connectionState === 'connected' || peerConnection.connectionState === 'connecting')) {
+async function applyRemoteAnswer(answerSdp) {
+  if (!peerConnection || peerConnection.signalingState !== 'have-local-offer') {
     return;
   }
-  currentWhepUrl = whepUrl;
-
-  if (peerConnection) {
-    try { peerConnection.close(); } catch {}
-  }
-
-  const pc = new RTCPeerConnection({
-    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-  });
-  peerConnection = pc;
-
-  pc.addTransceiver('video', { direction: 'recvonly' });
-  pc.addTransceiver('audio', { direction: 'recvonly' });
-
-  pc.ontrack = (event) => {
-    const videoEl = document.getElementById('remoteVideo');
-    if (videoEl && event.streams && event.streams[0]) {
-      videoEl.srcObject = event.streams[0];
-      const container = document.getElementById('webrtcContainer');
-      if (container) container.hidden = false;
-    }
-  };
-
   try {
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-
-    let res = null;
-    let lastErr = null;
-    for (let attempt = 1; attempt <= 6; attempt++) {
-      try {
-        res = await fetch(whepUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/sdp' },
-          body: offer.sdp
-        });
-        if (res && res.ok) break;
-      } catch (err) {
-        lastErr = err;
-        console.warn(`[WebRTC WHEP] Tentativa ${attempt}/6 falhou (aguardando propagação DNS Cloudflare...):`, err.message);
-        await new Promise(resolve => setTimeout(resolve, 2000));
-      }
-    }
-
-    if (!res || !res.ok) {
-      throw lastErr || new Error(`WHEP HTTP ${res ? res.status : 'desconhecido'}`);
-    }
-
-    const answerSdp = await res.text();
-    await pc.setRemoteDescription(new RTCSessionDescription({
+    await peerConnection.setRemoteDescription(new RTCSessionDescription({
       type: 'answer',
       sdp: answerSdp
     }));
-
     const container = document.getElementById('webrtcContainer');
     if (container) container.hidden = false;
-
-    setEmpty('Transmissão Nativa WebRTC Ao Vivo! 🟢', 'Conectado via WebRTC Direct UDP');
-    toast('Transmissão WebRTC UDP Conectada!');
-  } catch (err) {
-    console.warn('[WebRTC WHEP] Handshake notice:', err.message);
-    setEmpty('Transmissão Nativa UDP (WHEP)', `Conectando via WebRTC: ${whepUrl}`);
+    setEmpty('Transmissão Nativa WebRTC Ao Vivo! 🟢', 'Conectado via Supabase Direct UDP');
+    toast('WebRTC UDP Conectado via Supabase!');
+  } catch (e) {
+    console.warn('[WebRTC] Error setting remote answer:', e.message);
   }
-
 }
 
 async function startWebRTCSupabaseSignaling(roomId) {
@@ -1480,21 +1427,10 @@ async function startWebRTCSupabaseSignaling(roomId) {
       sdp_answer: null
     }).eq('id', roomId);
 
-    const signalChannel = supabase.channel(`room_signal_${roomId}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` }, async (payload) => {
+    supabase.channel(`room_signal_${roomId}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` }, (payload) => {
         if (payload.new && payload.new.sdp_answer) {
-          try {
-            await pc.setRemoteDescription(new RTCSessionDescription({
-              type: 'answer',
-              sdp: payload.new.sdp_answer
-            }));
-            const container = document.getElementById('webrtcContainer');
-            if (container) container.hidden = false;
-            setEmpty('Transmissão Nativa WebRTC Ao Vivo! 🟢', 'Conectado via Supabase Direct UDP');
-            toast('WebRTC UDP Conectado via Supabase!');
-          } catch (e) {
-            console.warn('[WebRTC] Error setting remote answer:', e);
-          }
+          applyRemoteAnswer(payload.new.sdp_answer);
         }
       })
       .subscribe();
@@ -1512,23 +1448,12 @@ async function subscribeViewerToSupabaseRoom(roomId) {
     if (!roomData) return;
 
     if (roomData.sdp_answer) {
-      if (peerConnection && peerConnection.signalingState === 'have-local-offer') {
-        try {
-          peerConnection.setRemoteDescription(new RTCSessionDescription({
-            type: 'answer',
-            sdp: roomData.sdp_answer
-          }));
-          const container = document.getElementById('webrtcContainer');
-          if (container) container.hidden = false;
-          setEmpty('Transmissão Nativa WebRTC Ao Vivo! 🟢', 'Conectado via Supabase Direct UDP');
-        } catch {}
-      }
-    } else if (roomData.tunnel_url) {
-      connectWebRTCWHEP(roomData.tunnel_url);
+      applyRemoteAnswer(roomData.sdp_answer);
     } else {
       setEmpty('Aguardando Transmissão Nativa (UDP)...', `ID da Sala: ${roomId}`);
     }
   };
+
 
 
 
