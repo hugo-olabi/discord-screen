@@ -393,17 +393,8 @@ class StreamerAppWindow(Gtk.ApplicationWindow):
                 GLib.idle_add(lambda: self.val_lag.set_text("< 50ms"))
 
                 set_active_video_stream(out_stream)
-                signaling_task = asyncio.create_task(
-                    iniciar_loop_signaling_supabase(SUPABASE_URL, SUPABASE_ANON_KEY, token)
-                )
+                await iniciar_loop_signaling_supabase(SUPABASE_URL, SUPABASE_ANON_KEY, token)
 
-
-                try:
-                    await iniciar_transmissao_websocket(
-                        server_url, token, out_stream, proc_stderr=cp, audio_stream=audio_proc
-                    )
-                finally:
-                    signaling_task.cancel()
 
 
 

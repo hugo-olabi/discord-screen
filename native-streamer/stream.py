@@ -133,20 +133,9 @@ def main():
         from webrtc_signaling import iniciar_loop_signaling_supabase, set_active_video_stream
         from supabase_client import SUPABASE_URL, SUPABASE_ANON_KEY
 
-        set_active_video_stream(out_stream)
-        signaling_task = asyncio.create_task(
-            iniciar_loop_signaling_supabase(SUPABASE_URL, SUPABASE_ANON_KEY, token)
-        )
-
-
         print("  ✅ Transmissão nativa conectada via Supabase Realtime WebRTC! Pressione Ctrl+C para encerrar.\n")
+        await iniciar_loop_signaling_supabase(SUPABASE_URL, SUPABASE_ANON_KEY, token)
 
-        try:
-            await iniciar_transmissao_websocket(
-                server_url, token, out_stream, proc_stderr=cp, audio_stream=audio_proc
-            )
-        finally:
-            signaling_task.cancel()
 
 
 
