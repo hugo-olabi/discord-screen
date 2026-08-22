@@ -23,10 +23,11 @@
         <h1 id="emptyTitle">Conectando…</h1>
         <p id="emptyText" class="muted">Entrando na sala</p>
         <div id="webrtcContainer" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 9999; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center;" hidden>
-          <video id="remoteVideo" autoplay playsinline controls style="width: 100%; height: 100%; object-fit: contain; background: #000;"></video>
-          <button id="btnFullscreen" onclick="document.getElementById('remoteVideo').requestFullscreen()" style="position: absolute; bottom: 20px; right: 20px; z-index: 10000; background: rgba(0,0,0,0.6); color: #fff; border: 1px solid rgba(255,255,255,0.3); padding: 8px 16px; border-radius: 8px; cursor: pointer; font-weight: bold; backdrop-filter: blur(10px);">📺 Tela Cheia (Fullscreen)</button>
+          <canvas id="videoCanvas" style="width: 100%; height: 100%; object-fit: contain; background: #000;"></canvas>
+          <button id="btnFullscreen" onclick="document.getElementById('videoCanvas').requestFullscreen()" style="position: absolute; bottom: 20px; right: 20px; z-index: 10000; background: rgba(0,0,0,0.6); color: #fff; border: 1px solid rgba(255,255,255,0.3); padding: 8px 16px; border-radius: 8px; cursor: pointer; font-weight: bold; backdrop-filter: blur(10px);">📺 Tela Cheia (Fullscreen)</button>
         </div>
       </div>
+
 
 
 

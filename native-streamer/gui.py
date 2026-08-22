@@ -386,14 +386,30 @@ class StreamerAppWindow(Gtk.ApplicationWindow):
                     except Exception as ea:
                         sys.stderr.write(f"\n[Audio] Error starting audio capture: {ea}\n")
 
-                from webrtc_signaling import iniciar_loop_signaling_supabase, set_active_video_stream
-                from supabase_client import SUPABASE_URL, SUPABASE_ANON_KEY
+                from ws_server import iniciar_servidor_ws, streamer_video_loop
+                from cloudflared_tunnel import iniciar_tunel_cloudflared
+                from supabase_client import atualizar_url_tunel_supabase
+
+                ws_runner, porta_real = await iniciar_servidor_ws(3001)
+                video_task = asyncio.create_task(streamer_video_loop(out_stream))
+
+                cf_proc, cf_url = iniciar_tunel_cloudflared(porta_real)
+                tunnel_public_url = cf_url if cf_url else f"ws://127.0.0.1:{porta_real}/ws"
 
                 GLib.idle_add(lambda: self.val_status.set_text("Live"))
-                GLib.idle_add(lambda: self.val_lag.set_text("< 50ms"))
+                GLib.idle_add(lambda: self.val_lag.set_text("< 40ms"))
+                atualizar_url_tunel_supabase(token, tunnel_public_url, status="live")
 
-                set_active_video_stream(out_stream)
-                await iniciar_loop_signaling_supabase(SUPABASE_URL, SUPABASE_ANON_KEY, token)
+                try:
+                    while True:
+                        await asyncio.sleep(1)
+                finally:
+                    video_task.cancel()
+                    await ws_runner.cleanup()
+                    if cf_proc:
+                        try: cf_proc.terminate()
+                        except Exception: pass
+
 
 
 

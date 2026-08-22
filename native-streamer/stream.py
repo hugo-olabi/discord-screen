@@ -123,18 +123,31 @@ def main():
             print("  ❌ Erro ao iniciar processo de captura de vídeo.")
             return
 
-        audio_proc = None
-        if stream_audio and not use_noise:
-            try:
-                audio_proc = await iniciar_processo_captura_audio(source_name=selected_name, is_screen=is_screen)
-            except Exception as ea:
-                print(f"  [Audio] Erro ao iniciar captura de áudio: {ea}")
+        from ws_server import iniciar_servidor_ws, streamer_video_loop
+        from cloudflared_tunnel import iniciar_tunel_cloudflared
+        from supabase_client import atualizar_url_tunel_supabase, SUPABASE_URL, SUPABASE_ANON_KEY
 
-        from webrtc_signaling import iniciar_loop_signaling_supabase, set_active_video_stream
-        from supabase_client import SUPABASE_URL, SUPABASE_ANON_KEY
+        ws_runner, porta_real = await iniciar_servidor_ws(3001)
+        video_task = asyncio.create_task(streamer_video_loop(out_stream))
 
-        print("  ✅ Transmissão nativa conectada via Supabase Realtime WebRTC! Pressione Ctrl+C para encerrar.\n")
-        await iniciar_loop_signaling_supabase(SUPABASE_URL, SUPABASE_ANON_KEY, token)
+        cf_proc, cf_url = iniciar_tunel_cloudflared(porta_real)
+        tunnel_public_url = cf_url if cf_url else f"ws://127.0.0.1:{porta_real}/ws"
+
+        print(f"  [Transmissão] Túnel WebSocket ativado: {tunnel_public_url}")
+        print("  [Supabase] Registrando sala como live no Supabase...")
+        atualizar_url_tunel_supabase(token, tunnel_public_url, status="live")
+
+        print("  ✅ Transmissão nativa conectada via WebCodecs + WebSocket! Pressione Ctrl+C para encerrar.\n")
+        try:
+            while True:
+                await asyncio.sleep(1)
+        finally:
+            video_task.cancel()
+            await ws_runner.cleanup()
+            if cf_proc:
+                try: cf_proc.terminate()
+                except Exception: pass
+
 
 
 
