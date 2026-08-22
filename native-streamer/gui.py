@@ -372,19 +372,22 @@ class StreamerAppWindow(Gtk.ApplicationWindow):
                     except Exception as ea:
                         sys.stderr.write(f"\n[Audio] Error starting audio capture: {ea}\n")
 
-                def on_connected():
-                    GLib.idle_add(lambda: self.val_status.set_text("Live"))
-                    GLib.idle_add(lambda: self.val_lag.set_text("< 50ms"))
-                    atualizar_url_tunel_supabase(token, server_url, status="live")
+                cf_proc, cf_url = iniciar_tunel_cloudflared()
+                tunnel_public_url = cf_url or server_url
 
+                GLib.idle_add(lambda: self.val_status.set_text("Live"))
+                GLib.idle_add(lambda: self.val_lag.set_text("< 50ms"))
+                atualizar_url_tunel_supabase(token, tunnel_public_url, status="live")
 
-                def on_error(err):
-                    GLib.idle_add(lambda: self.val_status.set_text(f"Error: {err}"))
-                    GLib.idle_add(lambda: self.val_lag.set_text("N/A"))
+                try:
+                    await iniciar_transmissao_websocket(
+                        server_url, token, out_stream, proc_stderr=cp, audio_stream=audio_proc
+                    )
+                finally:
+                    if cf_proc:
+                        try: cf_proc.terminate()
+                        except Exception: pass
 
-                await iniciar_transmissao_websocket(
-                    server_url, token, out_stream, proc_stderr=cp, audio_stream=audio_proc, ao_conectar=on_connected, ao_erro=on_error
-                )
 
             try:
                 asyncio.run(run_async())

@@ -215,9 +215,19 @@ async def iniciar_transmissao_websocket(server_url: str, token: str, stdout_stre
             finally:
                 task_rx.cancel()
 
+    except (ConnectionRefusedError, OSError, websockets.exceptions.WebSocketException) as e:
+        sys.stderr.write(f"\n  [Transmissão] Servidor WebSocket local desativado (127.0.0.1:3001). Continuando via Túnel Supabase/Cloudflare.\n")
+        try:
+            while True:
+                chunk = await stdout_stream.read(65536)
+                if not chunk:
+                    break
+        except Exception:
+            pass
     except Exception as e:
         if ao_erro:
             ao_erro(e)
         else:
-            sys.stderr.write(f"Erro na conexão WebSocket: {e}\n")
+            sys.stderr.write(f"Erro na transmissão WebSocket: {e}\n")
+
 

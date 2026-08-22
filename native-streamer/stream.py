@@ -120,19 +120,20 @@ def main():
         cf_proc, cf_url = iniciar_tunel_cloudflared()
         tunnel_public_url = cf_url or server_url
 
-        def ao_conectar_cb():
-            print("  Transmissão nativa conectada e ao vivo! Pressione Ctrl+C para encerrar.\n")
-            atualizar_url_tunel_supabase(token, tunnel_public_url, status="live")
+        print(f"  [Transmissão] Túnel configurado: {tunnel_public_url}")
+        print("  [Supabase] Registrando sala como live no Supabase...")
+        atualizar_url_tunel_supabase(token, tunnel_public_url, status="live")
+        print("  ✅ Transmissão nativa conectada e ao vivo no Supabase! Pressione Ctrl+C para encerrar.\n")
 
         try:
             await iniciar_transmissao_websocket(
-                server_url, token, out_stream, proc_stderr=cp, audio_stream=audio_proc,
-                ao_conectar=ao_conectar_cb
+                server_url, token, out_stream, proc_stderr=cp, audio_stream=audio_proc
             )
         finally:
             if cf_proc:
                 try: cf_proc.terminate()
                 except Exception: pass
+
 
 
 
