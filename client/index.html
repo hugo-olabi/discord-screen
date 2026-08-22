@@ -200,6 +200,38 @@
         </div>
       </div>
 
+      <div id="nativeStreamerModal" class="modal" hidden>
+        <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="nativeTitle">
+          <h2 id="nativeTitle">Transmitir Tela com Native Streamer</h2>
+          <p class="modal-sub">Para alta resolução e taxa de quadros (UDP), use o Transmissor Nativo.</p>
+
+          <label class="field-col">
+            <span>Seu Token / Stream ID</span>
+            <div style="display: flex; gap: 8px;">
+              <input id="nativeStreamToken" type="text" readonly style="flex: 1; font-family: monospace; font-weight: bold; background: rgba(0,0,0,0.2);" />
+              <button id="copyNativeToken" class="btn go" style="white-space: nowrap;">Copiar Token</button>
+            </div>
+          </label>
+
+          <div style="margin-top: 12px; font-size: 0.9em; line-height: 1.4; color: var(--muted, #aaa);">
+            <p><strong>Como usar:</strong></p>
+            <ol style="margin-left: 18px; margin-top: 4px;">
+              <li>Abra o aplicativo <code>native-streamer</code>.</li>
+              <li>Cole o Token acima e clique em Transmitir.</li>
+              <li>Sua transmissão UDP iniciará instantaneamente!</li>
+            </ol>
+          </div>
+
+          <div id="nativeStreamStatus" style="margin-top: 12px; padding: 8px 12px; border-radius: 6px; background: rgba(255,255,255,0.05); font-size: 0.85em; text-align: center; color: #ffb703;">
+            Aguardando conexão do Transmissor Nativo...
+          </div>
+
+          <div class="modal-actions" style="margin-top: 16px;">
+            <button id="nativeStreamClose" class="btn">Fechar</button>
+          </div>
+        </div>
+      </div>
+
       <div id="profileModal" class="modal" hidden>
         <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="profileTitle">
           <h2 id="profileTitle">Seu perfil</h2>

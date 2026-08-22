@@ -11,6 +11,8 @@ from janelas import listar_janelas
 from portal import obter_pipewire_fd_e_node
 from ffmpeg import iniciar_processo_captura, iniciar_processo_captura_audio
 from ws_client import iniciar_transmissao_websocket
+from supabase_client import atualizar_url_tunel_supabase
+
 
 def main():
     args = sys.argv[1:]
@@ -111,10 +113,15 @@ def main():
             except Exception as ea:
                 print(f"  [Audio] Erro ao iniciar captura de áudio: {ea}")
 
+        def ao_conectar_cb():
+            print("  Transmissão nativa conectada e ao vivo! Pressione Ctrl+C para encerrar.\n")
+            atualizar_url_tunel_supabase(token, server_url, status="live")
+
         await iniciar_transmissao_websocket(
             server_url, token, out_stream, proc_stderr=cp, audio_stream=audio_proc,
-            ao_conectar=lambda: print("  Transmissão nativa conectada e ao vivo! Pressione Ctrl+C para encerrar.\n")
+            ao_conectar=ao_conectar_cb
         )
+
 
     try:
         asyncio.run(run())

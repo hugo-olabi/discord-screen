@@ -16,6 +16,8 @@ from janelas import listar_janelas
 from portal import obter_pipewire_fd_e_node
 from ffmpeg import iniciar_processo_captura, iniciar_processo_captura_audio
 from ws_client import iniciar_transmissao_websocket
+from supabase_client import atualizar_url_tunel_supabase
+
 
 
 class RecordingSetupModal(Gtk.Window):
@@ -373,6 +375,8 @@ class StreamerAppWindow(Gtk.ApplicationWindow):
                 def on_connected():
                     GLib.idle_add(lambda: self.val_status.set_text("Live"))
                     GLib.idle_add(lambda: self.val_lag.set_text("< 50ms"))
+                    atualizar_url_tunel_supabase(token, server_url, status="live")
+
 
                 def on_error(err):
                     GLib.idle_add(lambda: self.val_status.set_text(f"Error: {err}"))

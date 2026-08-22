@@ -2,6 +2,8 @@ import { DiscordSDK } from '@discord/embedded-app-sdk';
 import { createPlayer } from './player.js';
 import { createAudio } from './audio.js';
 import { createBroadcaster } from '../../shared/broadcaster.js';
+import { supabase } from './supabaseClient.js';
+
 
 const $ = (id) => document.getElementById(id);
 
@@ -1968,17 +1970,87 @@ function stopMyBroadcast(fonte = null) {
   }
 }
 
-$('share').addEventListener('click', () => {
-  if (!session) return;
+let activeSupabaseChannel = null;
 
-  if (minhasFontes().has('tela') || myBroadcast) {
-    stopMyBroadcast('tela');
-    renderBar();
+async function openNativeStreamerModal() {
+  if (!roomTokens) {
+    toast('Nenhuma sala aberta. Entre em uma sala para transmitir.', true);
     return;
   }
 
-  ligarFonte('tela');
+  let shareToken = '';
+  try {
+    shareToken = new URL(roomTokens.shareUrl).searchParams.get('t') || roomTokens.roomId || '';
+  } catch {
+    shareToken = roomTokens.roomId || '';
+  }
+
+  if (!shareToken) shareToken = crypto.randomUUID();
+
+  $('nativeStreamToken').value = shareToken;
+  $('nativeStreamStatus').textContent = 'Aguardando conexão do Transmissor Nativo (UDP)...';
+  $('nativeStreamStatus').style.color = '#ffb703';
+  $('nativeStreamerModal').hidden = false;
+
+  try {
+    const { error } = await supabase
+      .from('rooms')
+      .upsert({
+        id: shareToken,
+        guild_id: session?.guildId || '',
+        channel_id: session?.channelId || '',
+        name: currentRoom?.name || 'Sala de Tela',
+        streamer_id: session?.user?.id || '',
+        status: 'waiting',
+        updated_at: new Date().toISOString(),
+      });
+    if (error) console.warn('[Supabase] Room upsert warning:', error.message);
+  } catch (err) {
+    console.warn('[Supabase] Failed to register room:', err);
+  }
+
+  if (activeSupabaseChannel) {
+    supabase.removeChannel(activeSupabaseChannel);
+  }
+
+  activeSupabaseChannel = supabase
+    .channel(`room:${shareToken}`)
+    .on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${shareToken}` },
+      (payload) => {
+        if (payload.new && payload.new.tunnel_url) {
+          $('nativeStreamStatus').textContent = `Conectado! Túnel UDP: ${payload.new.tunnel_url}`;
+          $('nativeStreamStatus').style.color = '#4caf50';
+          toast('Transmissão nativa UDP iniciada!');
+        }
+      }
+    )
+    .subscribe();
+}
+
+$('share').addEventListener('click', () => {
+  if (!session) return;
+  openNativeStreamerModal();
 });
+
+$('nativeStreamClose').addEventListener('click', () => {
+  $('nativeStreamerModal').hidden = true;
+});
+
+$('nativeStreamerModal').addEventListener('click', (e) => {
+  if (e.target === $('nativeStreamerModal')) $('nativeStreamerModal').hidden = true;
+});
+
+$('copyNativeToken').addEventListener('click', () => {
+  const tokenInput = $('nativeStreamToken');
+  tokenInput.select();
+  navigator.clipboard.writeText(tokenInput.value).then(
+    () => toast('Token copiado! Cole no native-streamer.'),
+    () => toast('Erro ao copiar token.', true)
+  );
+});
+
 
 $('camera').addEventListener('click', () => {
   if (!session) return;

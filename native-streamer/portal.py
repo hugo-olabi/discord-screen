@@ -210,13 +210,16 @@ def obter_pipewire_fd_e_node(timeout_seconds: int = 60) -> tuple[str | None, int
     return node_id, pw_fd, is_screen
 
 def solicitar_xdg_screencast(timeout_seconds: int = 60) -> str | None:
-    node, _ = obter_pipewire_fd_e_node(timeout_seconds)
-    return node
+    res = obter_pipewire_fd_e_node(timeout_seconds)
+    if isinstance(res, tuple) and len(res) >= 2:
+        return res[0]
+    return None
 
 if __name__ == '__main__':
-    node, fd = obter_pipewire_fd_e_node()
-    if node:
-        print(f"PIPEWIRE_NODE={node} FD={fd}")
+    res = obter_pipewire_fd_e_node()
+    if isinstance(res, tuple) and len(res) >= 2 and res[0]:
+        print(f"PIPEWIRE_NODE={res[0]} FD={res[1]}")
         sys.exit(0)
     else:
         sys.exit(1)
+
