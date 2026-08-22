@@ -3,10 +3,12 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import time
 import urllib.request
 
 TRYCLOUDFLARE_REGEX = re.compile(r"https://[a-z0-9-]+\.trycloudflare\.com")
+LOCALTUNNEL_REGEX = re.compile(r"https://[a-z0-9-]+\.loca\.lt")
 
 def obter_caminho_cloudflared() -> str:
     raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -20,19 +22,46 @@ def obter_caminho_cloudflared() -> str:
 
     return "cloudflared"
 
-def aguardar_dns_tunel_pronto(url: str, max_tentativas: int = 3) -> bool:
+def aguardar_dns_tunel_pronto(url: str, max_tentativas: int = 15) -> bool:
+    sys.stdout.write("  [Túnel] Aguardando propagação DNS global...")
+    sys.stdout.flush()
     for _ in range(max_tentativas):
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"}, method="GET")
-            with urllib.request.urlopen(req, timeout=2) as resp:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Bypass-Tunnel-Reminder": "1"}, method="GET")
+            with urllib.request.urlopen(req, timeout=3) as resp:
                 if resp.status < 500:
+                    print(" OK!")
                     return True
         except Exception:
-            time.sleep(0.5)
-    return True
-
+            sys.stdout.write(".")
+            sys.stdout.flush()
+            time.sleep(1)
+    print(" (DNS timeout)")
+    return False
 
 def iniciar_tunel_cloudflared(porta: int = 3001) -> tuple[subprocess.Popen | None, str | None]:
+    # 1. Tentar localtunnel (Instant DNS resolution, sem atrasos de propagação)
+    try:
+        if shutil.which("npx"):
+            print("  [Túnel] Inicializando localtunnel...")
+            proc = subprocess.Popen(
+                ["npx", "-y", "localtunnel", "--port", str(porta)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1
+            )
+            for linha in iter(proc.stdout.readline, ''):
+                match = LOCALTUNNEL_REGEX.search(linha)
+                if match:
+                    url_encontrada = match.group(0)
+                    ws_url = url_encontrada.replace("https://", "wss://") + "/ws"
+                    print(f"  [Localtunnel] Túnel ativado instantaneamente: {ws_url}")
+                    return proc, ws_url
+    except Exception as e:
+        print(f"  [Localtunnel] Indisponível: {e}")
+
+    # 2. Fallback para Cloudflare Tunnel se localtunnel falhar
     bin_path = obter_caminho_cloudflared()
     cmd = [bin_path, "tunnel", "--no-autoupdate", "--url", f"http://127.0.0.1:{porta}"]
 
@@ -53,14 +82,14 @@ def iniciar_tunel_cloudflared(porta: int = 3001) -> tuple[subprocess.Popen | Non
         match = TRYCLOUDFLARE_REGEX.search(linha)
         if match:
             url_encontrada = match.group(0)
-            print(f"  [Cloudflared] Túnel detectado: {url_encontrada}. Aguardando propagação DNS...")
+            print(f"  [Cloudflared] Túnel detectado: {url_encontrada}.")
             aguardar_dns_tunel_pronto(url_encontrada)
-            print(f"  [Cloudflared] Túnel ativado e DNS pronto: {url_encontrada}")
             break
 
     if url_encontrada:
-        # Converter https:// para wss:// para WebSockets
         ws_url = url_encontrada.replace("https://", "wss://") + "/ws"
         return proc, ws_url
 
     return proc, None
+
+iniciar_tunnel_cloudflared = iniciar_tunel_cloudflared
