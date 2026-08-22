@@ -1404,14 +1404,25 @@ async function connectWebRTCWHEP(whepUrl) {
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 
-    const res = await fetch(whepUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/sdp' },
-      body: offer.sdp
-    });
+    let res = null;
+    let lastErr = null;
+    for (let attempt = 1; attempt <= 6; attempt++) {
+      try {
+        res = await fetch(whepUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/sdp' },
+          body: offer.sdp
+        });
+        if (res && res.ok) break;
+      } catch (err) {
+        lastErr = err;
+        console.warn(`[WebRTC WHEP] Tentativa ${attempt}/6 falhou (aguardando propagação DNS Cloudflare...):`, err.message);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    }
 
-    if (!res.ok) {
-      throw new Error(`WHEP HTTP ${res.status}`);
+    if (!res || !res.ok) {
+      throw lastErr || new Error(`WHEP HTTP ${res ? res.status : 'desconhecido'}`);
     }
 
     const answerSdp = await res.text();
@@ -1429,6 +1440,7 @@ async function connectWebRTCWHEP(whepUrl) {
     console.warn('[WebRTC WHEP] Handshake notice:', err.message);
     setEmpty('Transmissão Nativa UDP (WHEP)', `Conectando via WebRTC: ${whepUrl}`);
   }
+
 }
 
 async function subscribeViewerToSupabaseRoom(roomId) {

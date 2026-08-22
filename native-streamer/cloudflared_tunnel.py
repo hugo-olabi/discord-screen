@@ -41,17 +41,32 @@ def iniciar_tunel_cloudflared(porta: int = 3001) -> tuple[subprocess.Popen | Non
         print(f"  [Cloudflared] Não foi possível executar o cloudflared: {e}")
         return None, None
 
-    url_encontrada = None
-    print("  [Cloudflared] Gerando túnel rápido Cloudflare para transmissão...")
+import time
+import urllib.request
 
+def aguardar_dns_tunel_pronto(url: str, max_tentativas: int = 15) -> bool:
+    """Aguardar a propagação do DNS público da Cloudflare para a URL do túnel (evita Status Code: null)."""
+    for i in range(max_tentativas):
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"}, method="GET")
+            with urllib.request.urlopen(req, timeout=3) as resp:
+                return True
+        except Exception:
+            time.sleep(1)
+    return False
+
+# ... inside iniciar_tunel_cloudflared:
     for linha in iter(proc.stdout.readline, ''):
         match = TRYCLOUDFLARE_REGEX.search(linha)
         if match:
             url_encontrada = match.group(0)
-            print(f"  [Cloudflared] Túnel ativado com sucesso: {url_encontrada}")
+            print(f"  [Cloudflared] Túnel detectado: {url_encontrada}. Aguardando propagação DNS...")
+            aguardar_dns_tunel_pronto(url_encontrada)
+            print(f"  [Cloudflared] Túnel ativado e DNS pronto: {url_encontrada}")
             break
 
     return proc, url_encontrada
+
 
 iniciar_tunnel_cloudflared = iniciar_tunel_cloudflared
 
