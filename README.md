@@ -2,54 +2,56 @@
 
 # StreamRoom
 
-Compartilhamento e transmissão de tela e áudio de alta performance via WebCodecs & WebRTC/WebSocket.
+High-performance screen and audio sharing via SolidJS, WebCodecs & WebRTC/WebSocket.
 
-O StreamRoom permite criar salas virtuais para assistir a transmissões em tempo real com ultra-baixa latência, utilizando aceleração por hardware (FFmpeg/WebCodecs) e sinalização via Supabase.
+StreamRoom allows users to create virtual rooms to watch real-time broadcasts with ultra-low latency, leveraging hardware acceleration (FFmpeg/WebCodecs) and Supabase signaling.
 
 ---
 
-## 🚀 Como Usar
+## 🚀 Getting Started
 
-### 1. Requisitos
-- **Node.js**: Versão 22 ou superior (para a interface web).
-- **FFmpeg**: Necessário apenas para o transmissor nativo no computador que vai transmitir.
+### 1. Requirements
+- **Node.js**: Version 22 or higher (for web client UI).
+- **FFmpeg**: Required only on the broadcasting machine for the Python Native Streamer.
 
-### 2. Instalação de Dependências
+### 2. Dependency Installation
 ```bash
 npm install
 ```
 
 ---
 
-## 🛠️ Comandos Principais
+## 🛠️ Main Commands
 
-| Comando | Descrição |
+| Command | Description |
 |---|---|
-| `npm run dev` | Inicia o servidor de desenvolvimento web (Vite) para a interface do cliente. |
-| `npm run build` | Compila a aplicação cliente para produção (gera os estáticos em `dist/`). |
-| `npm run stream` | Executa o transmissor nativo (Python GTK4 / CLI) para transmissão de tela e áudio com baixa latência. |
-| `npm run update-discord` | Atualiza o mapeamento de URL de atividades no Discord Developer Portal (opcional). |
-| `npm test` | Executa a suíte de testes unitários (Vitest). |
-| `npm run lint` | Executa a verificação de linter de código (ESLint). |
+| `npm run dev` | Launches the SolidJS Vite development server for the web interface. |
+| `npm run build` | Compiles the client application for production (generates static files in `dist/`). |
+| `npm run stream` | Launches the Python Native Streamer (GTK4 UI / CLI) for hardware-accelerated broadcast. |
+| `npm run update-discord` | Updates activity URL mappings in Discord Developer Portal (optional). |
+| `npm test` | Runs unit test suite (Vitest). |
+| `npm run lint` | Runs code linter check (ESLint). |
 
 ---
 
-## 🖥️ Transmissão Nativa (Python Native Streamer)
+## 🖥️ Python Native Streamer
 
-Para transmitir com alta taxa de quadros (60 FPS) e resolução elevada sem sobrecarregar o navegador, utilize o transmissor nativo:
+To stream at high framerates (60 FPS) and high resolutions without overloading the browser, use the standalone native streamer:
 
 ```bash
 npm run stream
 ```
 
-### Opções do Native Streamer:
-- Interface gráfica GTK4 para seleção de janelas/telas e fontes de áudio.
-- Suporte a aceleração por GPU (`NVENC`, `VAAPI`, `QSV`).
-- Suporte a transmissão de áudio do sistema via PipeWire / PulseAudio.
-- Túnel Cloudflare embutido para entrega direta de vídeo via WebSocket/WebCodecs.
+### Native Streamer Features:
+- GTK4 graphical interface for window/screen and audio source selection.
+- GPU acceleration support (`NVENC`, `VAAPI`, `QSV`).
+- System audio capture via PipeWire / PulseAudio.
+- Built-in Cloudflare Tunnel for direct WebSocket/WebCodecs video delivery.
 
 ---
 
-## 📖 Documentação Adicional
-- [como-funciona.md](docs/como-funciona.md): Explicação técnica sobre a arquitetura WebCodecs, Supabase e WebRTC.
-- [vps.md](docs/vps.md): Guia para hospedagem estática em VPS ou servidor web.
+## 📜 Legal Pages & Documentation
+- **Privacy Policy**: Accessible at `/privacy-policy`
+- **Terms of Service**: Accessible at `/terms-of-service`
+- [how-it-works.md](docs/how-it-works.md): Technical explanation of WebCodecs & Supabase architecture.
+- [vps.md](docs/vps.md): Guide for hosting static assets on a VPS or web server.

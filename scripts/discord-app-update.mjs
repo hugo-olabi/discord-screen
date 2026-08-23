@@ -1,47 +1,46 @@
 /**
- * Atualiza automaticamente as configurações da Aplicação no Discord Developer Portal
- * (Activities -> URL Mappings Target e OAuth2 -> Redirects) via Discord REST API.
+ * Automatically updates Discord Developer Portal Application settings
+ * (Activities -> URL Mappings Target and OAuth2 -> Redirects) via Discord REST API.
  */
-import { lerEnv, cor } from './env.mjs';
+import { readEnv, color } from './env.mjs';
 
 const API = 'https://discord.com/api/v9';
 
-export async function atualizarAppDiscord(url, { verbose = true } = {}) {
+export async function updateDiscordApp(url, { verbose = true } = {}) {
   const log = (...args) => {
-    if (verbose) console.log(`${cor.fraco}[Discord App Update Debug]${cor.fim}`, ...args);
+    if (verbose) console.log(`${color.dim}[Discord App Update Debug]${color.reset}`, ...args);
   };
 
   if (!url || !url.startsWith('https://')) {
-    log('❌ URL de túnel inválida fornecida:', url);
-    return { ok: false, motivo: 'URL inválida' };
+    log('❌ Invalid tunnel URL provided:', url);
+    return { ok: false, reason: 'Invalid URL' };
   }
 
-  const env = lerEnv();
+  const env = readEnv();
   const botToken = (env.DISCORD_BOT_TOKEN || process.env.DISCORD_BOT_TOKEN || '').trim();
   const userToken = (env.DISCORD_USER_TOKEN || process.env.DISCORD_USER_TOKEN || '').trim();
   const clientId = (env.DISCORD_CLIENT_ID || process.env.DISCORD_CLIENT_ID || '').trim();
 
-  const dominio = url.replace(/^https?:\/\//, '').replace(/\/+$/, '');
+  const domain = url.replace(/^https?:\/\//, '').replace(/\/+$/, '');
   const redirectUri = `${url.replace(/\/+$/, '')}/auth/callback`;
 
-  log(`Target Domain: "${dominio}"`);
+  log(`Target Domain: "${domain}"`);
   log(`Redirect URI: "${redirectUri}"`);
-  log(`Client ID: ${clientId || 'Nenhum'}`);
-  log(`BOT_TOKEN presente: ${Boolean(botToken)} (${botToken.length} chars)`);
-  log(`USER_TOKEN presente: ${Boolean(userToken)} (${userToken.length} chars)`);
+  log(`Client ID: ${clientId || 'None'}`);
+  log(`BOT_TOKEN present: ${Boolean(botToken)} (${botToken.length} chars)`);
+  log(`USER_TOKEN present: ${Boolean(userToken)} (${userToken.length} chars)`);
 
   if (!botToken && !userToken) {
-    log('❌ Nenhum token (Bot ou User) configurado no .env.');
-    return { ok: false, motivo: 'sem_token', dominio, redirectUri };
+    log('❌ Neither DISCORD_BOT_TOKEN nor DISCORD_USER_TOKEN configured in .env.');
+    return { ok: false, reason: 'no_token', domain, redirectUri };
   }
 
-  let atualizouTarget = false;
-  let atualizouRedirect = false;
-  let ultimoErro = null;
+  let updatedTarget = false;
+  let updatedRedirect = false;
+  let lastError = null;
 
-  // 1. Atualizar Activities -> URL Mappings Target via POST /applications/{clientId}/proxy-config
   if (userToken && clientId) {
-    log('🔐 Atualizando Activities → URL Mappings Target via proxy-config API...');
+    log('🔐 Updating Activities → URL Mappings Target via proxy-config API...');
     const authHeader = userToken.replace(/^(Bearer|Bot)\s+/, '');
     const proxyConfigUrl = `${API}/applications/${clientId}/proxy-config`;
 
@@ -53,29 +52,28 @@ export async function atualizarAppDiscord(url, { verbose = true } = {}) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          url_map: [{ prefix: '/', target: dominio }],
+          url_map: [{ prefix: '/', target: domain }],
         }),
       });
 
       log(`  └─ POST ${proxyConfigUrl} -> Status ${proxyRes.status}`);
 
       if (proxyRes.ok) {
-        atualizouTarget = true;
-        log(`  └─ ✅ Activities URL Mappings Target atualizado para "${dominio}"!`);
+        updatedTarget = true;
+        log(`  └─ ✅ Activities URL Mappings Target updated to "${domain}"!`);
       } else {
         const errText = await proxyRes.text();
-        ultimoErro = errText;
-        log(`  └─ ❌ Erro ao atualizar proxy-config (${proxyRes.status}):`, errText);
+        lastError = errText;
+        log(`  └─ ❌ Error updating proxy-config (${proxyRes.status}):`, errText);
       }
     } catch (err) {
-      ultimoErro = err.message;
-      log('  └─ ❌ Exceção de rede no proxy-config:', err.message);
+      lastError = err.message;
+      log('  └─ ❌ Network exception on proxy-config:', err.message);
     }
   }
 
-  // 2. Atualizar OAuth2 -> Redirects (via User Token ou Bot Token)
-  const tokenParaRedirect = userToken || botToken;
-  if (tokenParaRedirect) {
+  const tokenForRedirect = userToken || botToken;
+  if (tokenForRedirect) {
     const isBot = !userToken && botToken;
     const authHeader = isBot
       ? botToken.startsWith('Bot ')
@@ -84,7 +82,7 @@ export async function atualizarAppDiscord(url, { verbose = true } = {}) {
       : userToken.replace(/^(Bearer|Bot)\s+/, '');
 
     const appUrl = isBot ? `${API}/applications/@me` : `${API}/applications/${clientId}`;
-    log(`🤖 Atualizando OAuth2 Redirects via ${isBot ? 'Bot' : 'User'} Token (${appUrl})...`);
+    log(`🤖 Updating OAuth2 Redirects via ${isBot ? 'Bot' : 'User'} Token (${appUrl})...`);
 
     try {
       const getRes = await fetch(appUrl, {
@@ -111,63 +109,54 @@ export async function atualizarAppDiscord(url, { verbose = true } = {}) {
         log(`  └─ PATCH ${appUrl} -> Status ${patchRes.status}`);
 
         if (patchRes.ok) {
-          atualizouRedirect = true;
-          log(`  └─ ✅ OAuth2 Redirects atualizado para "${redirectUri}"!`);
+          updatedRedirect = true;
+          log(`  └─ ✅ OAuth2 Redirects updated to "${redirectUri}"!`);
         } else {
           const patchErrText = await patchRes.text();
-          ultimoErro = patchErrText;
-          log(`  └─ ❌ Erro ao atualizar Redirects (${patchRes.status}):`, patchErrText);
+          lastError = patchErrText;
+          log(`  └─ ❌ Error updating Redirects (${patchRes.status}):`, patchErrText);
         }
       } else {
         const getErrText = await getRes.text();
-        log(`  └─ ❌ Falha ao ler aplicação (${getRes.status}):`, getErrText);
+        log(`  └─ ❌ Failed to fetch application (${getRes.status}):`, getErrText);
       }
     } catch (err) {
-      ultimoErro = err.message;
-      log('  └─ ❌ Exceção de rede ao atualizar Redirects:', err.message);
+      lastError = err.message;
+      log('  └─ ❌ Network exception updating Redirects:', err.message);
     }
   }
 
   return {
-    ok: atualizouTarget || atualizouRedirect,
-    atualizouTarget,
-    atualizouRedirect,
+    ok: updatedTarget || updatedRedirect,
+    updatedTarget,
+    updatedRedirect,
     hasUserToken: Boolean(userToken),
-    dominio,
+    domain,
     redirectUri,
-    erro: ultimoErro,
+    error: lastError,
   };
 }
 
-export async function autoAtualizarDiscordApp(url) {
+export async function autoUpdateDiscordApp(url) {
   if (!url) return;
-  const res = await atualizarAppDiscord(url, { verbose: true });
+  const res = await updateDiscordApp(url, { verbose: true });
 
   if (res.ok) {
     console.log(
-      `\n${cor.verde}${cor.forte}  ✅ Aplicação no Discord Atualizada com Sucesso!${cor.fim}`,
+      `\n${color.green}${color.bold}  ✅ Discord Application Updated Successfully!${color.reset}`,
     );
-    if (res.atualizouTarget) {
-      console.log(`    └─ Activities → URL Mappings Target: ${cor.verde}${res.dominio}${cor.fim}`);
+    if (res.updatedTarget) {
+      console.log(`    └─ Activities → URL Mappings Target: ${color.green}${res.domain}${color.reset}`);
     }
-    if (res.atualizouRedirect) {
+    if (res.updatedRedirect) {
       console.log(
-        `    └─ OAuth2 → Redirect:               ${cor.verde}${res.redirectUri}${cor.fim}`,
+        `    └─ OAuth2 → Redirect:               ${color.green}${res.redirectUri}${color.reset}`,
       );
     }
     console.log('');
   }
-
-  if (!res.hasUserToken) {
-    console.log(
-      `${cor.amarelo}  ⚠️ IMPORTANTE: DISCORD_BOT_TOKEN está configurado, mas DISCORD_USER_TOKEN não está no .env.${cor.fim}`,
-    );
-    console.log(
-      `${cor.fraco}  - O OAuth2 Redirect foi ATUALIZADO AUTOMATICAMENTE para a nova URL: ${res.redirectUri}${cor.fim}`,
-    );
-    console.log(
-      `${cor.fraco}  - Para o "Activities → URL Mappings Target" mudar automaticamente a cada inicialização, adicione no .env:${cor.fim}`,
-    );
-    console.log(`      ${cor.verde}DISCORD_USER_TOKEN=seu_user_token_aqui${cor.fim}\n`);
-  }
 }
+
+// Backward compatibility aliases
+export const atualizarAppDiscord = updateDiscordApp;
+export const autoAtualizarDiscordApp = autoUpdateDiscordApp;
