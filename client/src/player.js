@@ -107,9 +107,16 @@ export function createPlayer(canvas, { onError, onTamanho, onRequestKeyframe } =
     }
   }
 
-  function draw(frame) {
-    // Buffer no tamanho nativo do vídeo: é isso que define a proporção
-    // intrínseca do elemento, e é o que impede o CSS de distorcer.
+  let latestFrame = null;
+  let animFrameId = null;
+
+  function renderLoop() {
+    animFrameId = requestAnimationFrame(renderLoop);
+    if (!latestFrame) return;
+
+    const frame = latestFrame;
+    latestFrame = null;
+
     let mudou = false;
     if (canvas.width !== frame.displayWidth || canvas.height !== frame.displayHeight) {
       canvas.width = frame.displayWidth;
@@ -118,20 +125,36 @@ export function createPlayer(canvas, { onError, onTamanho, onRequestKeyframe } =
     }
 
     ctx.drawImage(frame, 0, 0, canvas.width, canvas.height);
-
-    // VideoFrame segura memória de GPU; sem close() a aba trava em segundos.
     frame.close();
     framesDrawn++;
 
-    // Avisa no primeiro quadro e sempre que a resolução muda: quem desenha o
-    // palco precisa das duas coisas — tirar o "conectando" e refazer a forma.
     if (virgem || mudou) {
       virgem = false;
       onTamanho?.();
     }
   }
 
+  function draw(frame) {
+    if (latestFrame) {
+      latestFrame.close();
+    }
+    latestFrame = frame;
+
+    if (!animFrameId) {
+      animFrameId = requestAnimationFrame(renderLoop);
+    }
+  }
+
   function stop() {
+    if (animFrameId) {
+      cancelAnimationFrame(animFrameId);
+      animFrameId = null;
+    }
+    if (latestFrame) {
+      try { latestFrame.close(); } catch {}
+      latestFrame = null;
+    }
+
     if (decoder && decoder.state !== 'closed') {
       try {
         decoder.close();
