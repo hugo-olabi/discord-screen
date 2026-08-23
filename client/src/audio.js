@@ -148,7 +148,28 @@ export function createAudio({ onError, volume = 1 } = {}) {
     proximo += buffer.duration;
     tocou = true;
 
-    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+    if (ctx.state === 'suspended' && !resumeAttempted) {
+      resumeAttempted = true;
+      ctx.resume().then(() => {
+        resumeAttempted = false;
+      }).catch(() => {});
+    }
+  }
+
+  let resumeAttempted = false;
+
+  function unlockAudioOnGesture() {
+    if (ctx && ctx.state === 'suspended') {
+      ctx.resume().then(() => {
+        resumeAttempted = false;
+      }).catch(() => {});
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('click', unlockAudioOnGesture, { capture: true });
+    window.addEventListener('keydown', unlockAudioOnGesture, { capture: true });
+    window.addEventListener('touchstart', unlockAudioOnGesture, { capture: true });
   }
 
   /**
