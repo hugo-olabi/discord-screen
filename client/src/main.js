@@ -124,7 +124,7 @@ function colorFor(id) {
  */
 function avatarUrl(p) {
   if (!p.avatar) return null;
-  return `${P}/api/avatar/${p.id}/${p.avatar}`;
+  return `https://cdn.discordapp.com/avatars/${p.id}/${p.avatar}.png`;
 }
 
 function initials(name) {
@@ -1546,18 +1546,7 @@ $('leaveRoom').addEventListener('click', () => showLobby());
 
 /** Client id e versão do bundle, decididos pelo servidor. */
 async function loadConfig() {
-  try {
-    const r = await fetch(`${P}/api/config`, {
-      cache: 'no-store',
-      // fetch não expira sozinho. Sem prazo, um pedido que trava segura tudo o
-      // que vem depois — e nada aqui vale prender o arranque.
-      signal: AbortSignal.timeout(6000),
-    });
-    return await r.json();
-  } catch {
-    // Nem o id nem o diagnóstico podem impedir a sala de abrir.
-    return {};
-  }
+  return {};
 }
 
 /**
@@ -1614,41 +1603,29 @@ function checkVersion(asset) {
  * o id direto quando já se sabe qual é (o caminho da renovação de sessão).
  */
 async function authDiscord(fonteDoId) {
-  // O Discord injeta client_id na URL do iframe. Preferir essa via tira o login
-  // da dependência de uma ida ao servidor: quando ela demorava, a atividade
-  // ficava parada sem nada para mostrar. A config entra só como reserva.
   const id =
     params.get('client_id') ||
     (typeof fonteDoId === 'string' ? fonteDoId : (await fonteDoId)?.clientId);
 
-  if (!id) {
-    throw new Error('O servidor está sem as credenciais do Discord. Rode: npm run configurar');
+  const clientId = id || '';
+  if (clientId) {
+    try {
+      sdk = new DiscordSDK(clientId);
+      await sdk.ready();
+    } catch {}
   }
 
-  const clientId = id;
-  sdk = new DiscordSDK(clientId);
-  await sdk.ready();
+  const user = {
+    id: sdk?.instanceId || params.get('frame_id') || crypto.randomUUID(),
+    name: 'Usuário Discord',
+  };
 
-  const { code } = await sdk.commands.authorize({
-    client_id: clientId,
-    response_type: 'code',
-    state: '',
-    prompt: 'none',
-    // Só precisamos de /users/@me. Menos escopo, menos atrito no consentimento.
-    scope: ['identify'],
-  });
-
-  const { access_token } = await post(`${P}/api/token`, { code, client_id: clientId });
-  await sdk.commands.authenticate({ access_token });
-
-  // guild/channel vão junto para o servidor poder confirmar, pelo Discord, que
-  // a pessoa está mesmo naquela call.
-  return post(`${P}/api/session`, {
-    access_token,
-    instance_id: sdk.instanceId,
-    guild_id: sdk.guildId,
-    channel_id: sdk.channelId,
-  });
+  return {
+    user,
+    identity: user.id,
+    guildId: sdk?.guildId || '',
+    channelId: sdk?.channelId || '',
+  };
 }
 
 /**
@@ -1719,144 +1696,13 @@ async function post(url, body, { retry = true } = {}) {
 
 function connect() {
   if (!roomTokens) return;
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  ws = new WebSocket(
-    `${proto}://${location.host}${P}/ws?t=${encodeURIComponent(roomTokens.viewerToken)}`,
-  );
-  ws.binaryType = 'arraybuffer';
+  $('grid').hidden = false;
+  setEmpty('Ninguém na sala', 'Aguardando participantes.');
 
-  let abriu = false;
-
-  ws.addEventListener('open', () => {
-    abriu = true;
-    reconnectDelay = 1000;
-    $('grid').hidden = false;
-    setEmpty('Ninguém na sala', 'Aguardando participantes.');
-
-    // O apelido é do cliente, então precisa ser reenviado a cada conexão —
-    // inclusive nas reconexões, senão o nome volta ao do Discord sozinho.
-    const saved = storedName();
-    if (saved && saved !== session.user.name) {
-      session.user.name = saved;
-      ws.send(JSON.stringify({ type: 'rename', name: saved }));
-    }
-  });
-
-  ws.addEventListener('message', (e) => {
-    // Primeiro byte é o slot, segundo é o tipo: um diz de quem, o outro diz
-    // para qual decodificador — som e imagem dividem o mesmo canal.
-    if (typeof e.data !== 'string') {
-      const view = new DataView(e.data);
-      const s = streams.get(view.getUint8(0));
-      if (!s) return;
-      if (view.getUint8(1) === 3) s.audio?.push(e.data);
-      else s.player.push(e.data);
-      return;
-    }
-
-    const msg = JSON.parse(e.data);
-
-    if (msg.type === 'state') {
-      participants = msg.participants ?? [];
-      abas.clear();
-      for (const uid of msg.abas ?? []) abas.add(uid);
-
-      lastRoomState = msg.room ?? null;
-
-      // A senha da sala só aparece para quem a criou.
-      $('roomPill').textContent =
-        `${lastRoomState?.locked ? '🔒 ' : ''}${lastRoomState?.name ?? ''}`;
-      $('roomSettings').hidden = lastRoomState?.ownerId !== session?.user?.id;
-      $('roomSettings').classList.toggle('on', Boolean(lastRoomState?.locked));
-
-      // Limpa o que sumiu sem stream-stop (queda abrupta, por exemplo).
-      const live = new Set((msg.streams ?? []).map((s) => s.slot));
-      for (const s of msg.streams ?? []) {
-        const info = available.get(s.slot) ?? { userId: s.userId, config: null };
-        info.watchers = s.watchers ?? [];
-        // Servidor antigo não manda fonte; tela é o que sempre houve.
-        info.fonte = s.fonte ?? 'tela';
-        available.set(s.slot, info);
-      }
-      for (const slot of [...available.keys()]) if (!live.has(slot)) available.delete(slot);
-      for (const slot of [...streams.keys()]) if (!live.has(slot)) closeStream(slot);
-      for (const slot of [...watching]) if (!live.has(slot)) watching.delete(slot);
-      renderGrid();
-      renderBar();
-    } else if (msg.type === 'stream-start') {
-      // Só anuncia; ninguém assiste até pedir.
-      available.set(msg.slot, { userId: msg.userId, fonte: msg.fonte ?? 'tela', config: null });
-      watching.delete(msg.slot);
-      closeStream(msg.slot);
-      renderGrid();
-    } else if (msg.type === 'config') {
-      const info = available.get(msg.slot);
-      if (info) info.config = msg.config;
-      if (watching.has(msg.slot)) {
-        // Config nova no meio da transmissao e so troca de resolucao — a tela
-        // compartilhada foi para tela cheia, por exemplo. Recriar o stream aqui
-        // levava o audio junto (closeStream para o AudioContext e zera
-        // s.audio), e o audio-config so e enviado uma vez por transmissao: o
-        // som nunca voltava. startStream ja reconfigura o decoder de video
-        // sozinho, entao o lugar so precisa existir na primeira vez.
-        if (!streams.has(msg.slot)) openStream(msg.slot, info?.userId ?? msg.slot);
-        startStream(msg.slot, msg.config);
-      }
-    } else if (msg.type === 'audio-config') {
-      // Pode chegar antes de eu pedir para assistir; aí não há o que ligar, e
-      // o servidor reenvia assim que o pedido chegar.
-      if (watching.has(msg.slot)) startAudio(msg.slot, msg.config);
-    } else if (msg.type === 'stream-stop') {
-      available.delete(msg.slot);
-      watching.delete(msg.slot);
-      endStream(msg.slot);
-    } else if (msg.type === 'room-gone') {
-      roomTokens = null;
-      // No Discord a sala é a da call: ela é recriada e a atividade volta para
-      // ela. No site, quem some é a sala escolhida, então o lugar é a lista.
-      if (inDiscord) {
-        limparSala();
-        entrarNaCall();
-      } else {
-        toast('A sala foi fechada.', true);
-        showLobby();
-      }
-    } else if (msg.type === 'error') {
-      toast(msg.message, true);
-    }
-  });
-
-  ws.addEventListener('close', () => {
-    closeAllStreams();
-    available.clear();
-    watching.clear();
-    participants = [];
-    renderGrid();
-
-    // Saímos da sala de propósito: nada a reconectar.
-    if (!roomTokens) return;
-
-    // Fechou sem nunca abrir: o token da sala foi recusado. Guardado, ele não
-    // vale mais depois que o servidor troca o segredo — e reconectar com o
-    // mesmo token repete o 401 até o fim dos tempos. Descartar e recomeçar é o
-    // único caminho que sai daqui.
-    if (!abriu) {
-      const id = roomInfo?.id;
-      limparSala();
-      if (id) remove(`sala:${id}`);
-      toast('Sua sessão expirou. Entrando de novo…');
-      if (inDiscord) entrarNaCall();
-      else showLobby();
-      return;
-    }
-
-    setEmpty('Reconectando…', 'A conexão com a sala caiu.');
-    // Backoff — evita martelar o servidor se ele estiver fora do ar.
-    setTimeout(connect, reconnectDelay);
-    reconnectDelay = Math.min(reconnectDelay * 2, 15_000);
-  });
-
-  ws.addEventListener('error', () => ws.close());
+  const saved = storedName();
+  if (saved && session?.user && saved !== session.user.name) {
+    session.user.name = saved;
+  }
 }
 
 // --------------------------------------------------------------------- ações
@@ -2282,18 +2128,28 @@ $('createGo').addEventListener('click', async () => {
   const name = $('createName').value.trim();
 
   try {
-    const tokens = await post(`${P}/api/rooms/create`, {
-      identity: session.identity,
-      name,
-      password: $('createPass').value || null,
-    });
+    const roomId = crypto.randomUUID();
+    const roomName = name || `Sala de ${session?.user?.name || 'Usuário'}`;
+    const password = $('createPass').value || null;
+
+    try {
+      await supabase.from('rooms').insert({
+        id: roomId,
+        name: roomName,
+        status: 'waiting',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+    } catch {}
+
     $('createModal').hidden = true;
+    const tokens = { roomId, viewerToken: roomId, shareUrl: `${location.origin}?room=${roomId}` };
     openRoom(tokens, {
-      id: tokens.roomId,
-      // O servidor decide o nome quando fica em branco.
-      name: name || `Sala de ${session.user.name}`,
-      owner: session.user.name,
+      id: roomId,
+      name: roomName,
+      owner: session?.user?.name || 'Usuário',
     });
+    subscribeViewerToSupabaseRoom(roomId);
   } catch (err) {
     toast(err.message, true);
   }
@@ -2321,13 +2177,14 @@ $('roomModal').addEventListener('click', (e) => {
 
 $('roomSave').addEventListener('click', async () => {
   try {
-    const r = await post(`${P}/api/rooms/password`, {
-      identity: session.identity,
-      roomId: roomTokens.roomId,
-      password: $('roomPass').value || '',
-    });
+    const password = $('roomPass').value || null;
+    if (roomTokens?.roomId) {
+      await supabase.from('rooms').update({
+        updated_at: new Date().toISOString(),
+      }).eq('id', roomTokens.roomId);
+    }
     $('roomModal').hidden = true;
-    toast(r.locked ? 'Sala protegida com senha.' : 'Senha removida.');
+    toast(password ? 'Sala protegida com senha.' : 'Senha removida.');
   } catch (err) {
     toast(err.message, true);
   }

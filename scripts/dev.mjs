@@ -63,8 +63,6 @@ contarEntryPoint(await garantirEntryPoint(DISCORD_CLIENT_ID, DISCORD_CLIENT_SECR
 let servidorIniciado = false;
 
 function iniciarServidor(origem) {
-  // O endereço pode ser anunciado de novo se o cloudflared reconectar; o
-  // servidor é um só.
   if (servidorIniciado) return;
   servidorIniciado = true;
 
@@ -72,9 +70,9 @@ function iniciarServidor(origem) {
   if (origem) env.PUBLIC_ORIGIN = origem;
 
   acompanhar(
-    'servidor',
+    'site-dev',
     cor.azul,
-    spawn(process.execPath, ['--watch', 'server/index.js'], { cwd: RAIZ, stdio: 'pipe', env }),
+    spawn(process.execPath, [VITE, 'dev', '--host', '0.0.0.0', '--port', '3001'], { cwd: path.join(RAIZ, 'client'), stdio: 'pipe', env }),
   );
 }
 
