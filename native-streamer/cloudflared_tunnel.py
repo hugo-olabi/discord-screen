@@ -49,7 +49,7 @@ def aguardar_dns_tunel_pronto(url: str, max_tentativas: int = 20) -> bool:
 
 def iniciar_tunel_cloudflared(porta: int = 3001) -> tuple[subprocess.Popen | None, str | None]:
     bin_path = obter_caminho_cloudflared()
-    cmd = [bin_path, "tunnel", "--no-autoupdate", "--url", f"http://127.0.0.1:{porta}"]
+    cmd = [bin_path, "tunnel", "--no-autoupdate", "--protocol", "http2", "--url", f"http://127.0.0.1:{porta}"]
 
     try:
         print(f"  [Cloudflared] Inicializando túnel Cloudflare para porta {porta}...")

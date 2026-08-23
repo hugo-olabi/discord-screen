@@ -1527,6 +1527,8 @@ function connectWebCodecsWebSocket(wsUrl, forceRetry = false) {
 }
 
 
+let currentSubscribedRoomId = null;
+
 async function subscribeViewerToSupabaseRoom(roomId) {
   if (!roomId) return;
 
@@ -1556,18 +1558,23 @@ async function subscribeViewerToSupabaseRoom(roomId) {
     } catch {}
   }, 2000);
 
-  if (viewerSupabaseChannel) supabase.removeChannel(viewerSupabaseChannel);
+  if (currentSubscribedRoomId !== roomId || !viewerSupabaseChannel) {
+    currentSubscribedRoomId = roomId;
+    if (viewerSupabaseChannel) {
+      try { supabase.removeChannel(viewerSupabaseChannel); } catch {}
+    }
 
-  viewerSupabaseChannel = supabase
-    .channel(`viewer:${roomId}`)
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` },
-      (payload) => {
-        if (payload.new) handleRoomUpdate(payload.new);
-      }
-    )
-    .subscribe();
+    viewerSupabaseChannel = supabase
+      .channel(`viewer:${roomId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` },
+        (payload) => {
+          if (payload.new) handleRoomUpdate(payload.new);
+        }
+      )
+      .subscribe();
+  }
 }
 
 
