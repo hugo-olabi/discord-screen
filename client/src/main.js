@@ -1371,18 +1371,48 @@ function openRoom(tokens, room) {
 let viewerSupabaseChannel = null;
 let roomPollInterval = null;
 let currentWs = null;
+let currentWsUrl = null;
 let currentPlayer = null;
 let reconnectTimeout = null;
+let wsReconnectAttempts = 0;
+const MAX_WS_RECONNECT_ATTEMPTS = 5;
+
+
+function stopWebCodecsWebSocket() {
+  if (reconnectTimeout) {
+    clearTimeout(reconnectTimeout);
+    reconnectTimeout = null;
+  }
+  if (currentWs) {
+    try {
+      currentWs.onopen = null;
+      currentWs.onmessage = null;
+      currentWs.onerror = null;
+      currentWs.onclose = null;
+      currentWs.close();
+    } catch {}
+    currentWs = null;
+  }
+  currentWsUrl = null;
+  wsReconnectAttempts = 0;
+}
 
 
 function connectWebCodecsWebSocket(wsUrl) {
-  if (currentWs && (currentWs.readyState === WebSocket.OPEN || currentWs.readyState === WebSocket.CONNECTING)) {
+  if (!wsUrl) {
+    stopWebCodecsWebSocket();
     return;
   }
 
-  if (currentWs) {
-    try { currentWs.close(); } catch {}
+  if (currentWs && currentWsUrl === wsUrl && (currentWs.readyState === WebSocket.OPEN || currentWs.readyState === WebSocket.CONNECTING)) {
+    return;
   }
+
+  if (currentWsUrl !== wsUrl) {
+    stopWebCodecsWebSocket();
+  }
+
+  currentWsUrl = wsUrl;
 
   const canvas = document.getElementById('videoCanvas');
   const container = document.getElementById('webrtcContainer');
@@ -1401,6 +1431,8 @@ function connectWebCodecsWebSocket(wsUrl) {
     currentWs = ws;
 
     ws.onopen = () => {
+      if (currentWs !== ws) return;
+      wsReconnectAttempts = 0;
       if (reconnectTimeout) clearTimeout(reconnectTimeout);
       setEmpty('Transmissão Nativa Ao Vivo! 🟢', 'WebCodecs ~40ms Direct Streaming');
       if (container) container.hidden = false;
@@ -1408,6 +1440,7 @@ function connectWebCodecsWebSocket(wsUrl) {
     };
 
     ws.onmessage = (evt) => {
+      if (currentWs !== ws) return;
       if (typeof evt.data === 'string') {
         try {
           const msg = JSON.parse(evt.data);
@@ -1422,7 +1455,8 @@ function connectWebCodecsWebSocket(wsUrl) {
       }
     };
 
-    ws.onerror = (err) => {
+    ws.onerror = () => {
+      if (currentWs !== ws) return;
       console.warn('[WebSocket notice] Conexão aguardando propagação DNS Cloudflare...');
     };
 
@@ -1430,16 +1464,29 @@ function connectWebCodecsWebSocket(wsUrl) {
       if (currentWs === ws) {
         currentWs = null;
         if (reconnectTimeout) clearTimeout(reconnectTimeout);
+
+        wsReconnectAttempts++;
+        if (wsReconnectAttempts > MAX_WS_RECONNECT_ATTEMPTS) {
+          console.warn(`[WebSocket notice] Túnel Cloudflare inacessível após ${MAX_WS_RECONNECT_ATTEMPTS} tentativas. Interrompendo reconexão até novo túnel.`);
+          setEmpty('Túnel Inacessível ⚠️', 'O túnel de transmissão expirou ou caiu. Aguardando novo túnel...');
+          return;
+        }
+
+        const delay = Math.min(1500 * wsReconnectAttempts, 6000);
         reconnectTimeout = setTimeout(() => {
           connectWebCodecsWebSocket(wsUrl);
-        }, 1500);
+        }, delay);
       }
     };
   } catch (err) {
     if (reconnectTimeout) clearTimeout(reconnectTimeout);
-    reconnectTimeout = setTimeout(() => {
-      connectWebCodecsWebSocket(wsUrl);
-    }, 1500);
+    wsReconnectAttempts++;
+    if (wsReconnectAttempts <= MAX_WS_RECONNECT_ATTEMPTS) {
+      const delay = Math.min(1500 * wsReconnectAttempts, 6000);
+      reconnectTimeout = setTimeout(() => {
+        connectWebCodecsWebSocket(wsUrl);
+      }, delay);
+    }
   }
 }
 
@@ -1453,6 +1500,7 @@ async function subscribeViewerToSupabaseRoom(roomId) {
     if (roomData.tunnel_url) {
       connectWebCodecsWebSocket(roomData.tunnel_url);
     } else {
+      stopWebCodecsWebSocket();
       setEmpty('Aguardando Transmissão Nativa...', `ID da Sala: ${roomId}`);
     }
   };

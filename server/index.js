@@ -116,6 +116,7 @@ app.use((req, _res, next) => {
 });
 
 app.use(express.json());
+app.get('/favicon.ico', (_req, res) => res.status(204).end());
 
 // Uma Activity roda dentro de um iframe em <id>.discordsays.com, que por sua
 // vez está dentro do discord.com. Declarar essa cadeia é o que autoriza o
