@@ -55,6 +55,14 @@ export default function Home() {
     const currentUser = await getCurrentUser();
     if (currentUser) setUser(currentUser);
 
+    // Listen for OAuth session changes
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event) => {
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        const refreshedUser = await getCurrentUser();
+        if (refreshedUser) setUser(refreshedUser);
+      }
+    });
+
     // Initialize broadcaster engine
     broadcaster = await createBroadcaster({
       onStateChange: ({ active, type, error, reason }) => {

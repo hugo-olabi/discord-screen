@@ -4,14 +4,6 @@
   "framework": "vite",
   "rewrites": [
     {
-      "source": "/auth/v1/callback",
-      "destination": "https://elpfsixxbdnvwxhundxl.supabase.co/auth/v1/callback"
-    },
-    {
-      "source": "/auth/v1/:path*",
-      "destination": "https://elpfsixxbdnvwxhundxl.supabase.co/auth/v1/:path*"
-    },
-    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
