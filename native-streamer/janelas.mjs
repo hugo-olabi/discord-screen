@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
  * @returns {string|null} Node ID do PipeWire
  */
 export function obterPipeWireNodeViaPortal() {
-  if (os.platform() !== 'linux') return null;
+  if (os.platform() !== 'linux' || process.env.VITEST || process.env.CI) return null;
 
   try {
     const dir = path.dirname(fileURLToPath(import.meta.url));

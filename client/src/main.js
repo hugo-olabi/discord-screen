@@ -1395,6 +1395,11 @@ function stopWebCodecsWebSocket() {
   }
   currentWsUrl = null;
   wsReconnectAttempts = 0;
+  closeAllStreams();
+  available.clear();
+  watching.clear();
+  participants = [];
+  renderGrid();
 }
 
 
@@ -1414,15 +1419,6 @@ function connectWebCodecsWebSocket(wsUrl) {
 
   currentWsUrl = wsUrl;
 
-  const canvas = document.getElementById('videoCanvas');
-  const container = document.getElementById('webrtcContainer');
-
-  if (canvas && !currentPlayer) {
-    currentPlayer = createPlayer(canvas, {
-      onError: (err) => console.warn('[Player error]', err),
-    });
-  }
-
   setEmpty('Conectando WebSocket... ⚡', `Túnel: ${wsUrl}`);
 
   try {
@@ -1434,8 +1430,14 @@ function connectWebCodecsWebSocket(wsUrl) {
       if (currentWs !== ws) return;
       wsReconnectAttempts = 0;
       if (reconnectTimeout) clearTimeout(reconnectTimeout);
-      setEmpty('Transmissão Nativa Ao Vivo! 🟢', 'WebCodecs ~40ms Direct Streaming');
-      if (container) container.hidden = false;
+
+      participants = [{ id: 'streamer', name: 'Transmissão Nativa', broadcasting: true }];
+      available.set(0, { userId: 'streamer', fonte: 'tela', config: null });
+      watching.add(0);
+      openStream(0, 'streamer');
+      renderGrid();
+
+      setEmpty('Transmissão Nativa Ao Vivo! 🟢', 'WebCodecs Direct Streaming');
       toast('Transmissão Nativa Conectada (~40ms)!');
     };
 
@@ -1444,14 +1446,28 @@ function connectWebCodecsWebSocket(wsUrl) {
       if (typeof evt.data === 'string') {
         try {
           const msg = JSON.parse(evt.data);
-          if (msg.type === 'config' && currentPlayer) {
-            currentPlayer.start(msg.config);
-            if (container) container.hidden = false;
+          if (msg.type === 'config') {
+            const info = available.get(0) || { userId: 'streamer', config: msg.config };
+            info.config = msg.config;
+            available.set(0, info);
+            if (!streams.has(0)) openStream(0, 'streamer');
+            startStream(0, msg.config);
+          } else if (msg.type === 'audio-config') {
+            startAudio(0, msg.config);
           }
         } catch {}
-      } else if (evt.data instanceof ArrayBuffer && currentPlayer) {
-        currentPlayer.push(evt.data);
-        if (container) container.hidden = false;
+      } else if (evt.data instanceof ArrayBuffer) {
+        const view = new DataView(evt.data);
+        const slot = view.getUint8(0);
+        const type = view.getUint8(1);
+        const s = streams.get(slot) || streams.get(0);
+        if (s) {
+          if (type === 3) {
+            s.audio?.push(evt.data);
+          } else {
+            s.player.push(evt.data);
+          }
+        }
       }
     };
 
@@ -1468,6 +1484,7 @@ function connectWebCodecsWebSocket(wsUrl) {
         wsReconnectAttempts++;
         if (wsReconnectAttempts > MAX_WS_RECONNECT_ATTEMPTS) {
           console.warn(`[WebSocket notice] Túnel Cloudflare inacessível após ${MAX_WS_RECONNECT_ATTEMPTS} tentativas. Interrompendo reconexão até novo túnel.`);
+          stopWebCodecsWebSocket();
           setEmpty('Túnel Inacessível ⚠️', 'O túnel de transmissão expirou ou caiu. Aguardando novo túnel...');
           return;
         }
