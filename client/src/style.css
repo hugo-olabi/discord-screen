@@ -1393,3 +1393,258 @@ button {
   border-color: var(--danger);
   color: #ffb3b6;
 }
+
+/* ----------------------------------------------------------- legal pages */
+
+.legal-page {
+  min-height: 100vh;
+  background: radial-gradient(circle at top, #18191c 0%, #090a0c 100%);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.legal-header {
+  height: 64px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(12px);
+  background: rgba(18, 19, 22, 0.7);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.legal-header-content {
+  max-width: 900px;
+  margin: 0 auto;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+}
+
+.back-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 14px;
+  transition: color 0.15s ease;
+}
+
+.back-link:hover {
+  color: var(--text);
+}
+
+.brand-logo {
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: -0.02em;
+  background: linear-gradient(135deg, #7289da 0%, #5865f2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.legal-container {
+  flex: 1;
+  max-width: 900px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 40px 24px 80px;
+}
+
+.legal-card {
+  background: rgba(30, 31, 34, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 48px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(20px);
+}
+
+.legal-title {
+  font-size: 32px;
+  font-weight: 700;
+  margin: 0 0 8px 0;
+  letter-spacing: -0.02em;
+}
+
+.legal-updated {
+  color: var(--muted);
+  font-size: 13.5px;
+  margin-bottom: 36px;
+}
+
+.legal-section {
+  margin-bottom: 36px;
+}
+
+.legal-section h2 {
+  font-size: 19px;
+  font-weight: 600;
+  margin: 0 0 12px 0;
+  color: #fff;
+  letter-spacing: -0.01em;
+}
+
+.legal-section p {
+  color: #dbdee1;
+  line-height: 1.65;
+  margin: 0 0 12px 0;
+  font-size: 14.5px;
+}
+
+.legal-section ul {
+  margin: 8px 0 16px 20px;
+  padding: 0;
+  color: #dbdee1;
+}
+
+.legal-section li {
+  margin-bottom: 8px;
+  line-height: 1.6;
+}
+
+.legal-footer {
+  margin-top: 48px;
+  padding-top: 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.legal-nav-link {
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.legal-nav-link:hover {
+  text-decoration: underline;
+}
+
+.dot-sep {
+  color: var(--muted);
+}
+
+/* ------------------------------------------------ topbar & navigation styles */
+
+.topbar-left, .topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.topbar-right {
+  margin-left: auto;
+}
+
+.brand-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  color: var(--text);
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.brand-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--live);
+  box-shadow: 0 0 10px var(--live);
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-right: 8px;
+}
+
+.topbar-link {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 500;
+  transition: color 0.15s ease;
+}
+
+.topbar-link:hover {
+  color: var(--text);
+}
+
+.lobby-footer {
+  margin-top: auto;
+  padding: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.footer-link {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 13px;
+  transition: color 0.15s ease;
+}
+
+.footer-link:hover {
+  color: var(--text);
+}
+
+.mono-input {
+  flex: 1;
+  font-family: monospace;
+  font-weight: 600;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--line);
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 6px;
+}
+
+.input-copy-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.instructions-box {
+  margin-top: 16px;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--muted);
+  background: rgba(0,0,0,0.15);
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.04);
+}
+
+.status-banner {
+  margin-top: 16px;
+  padding: 10px 14px;
+  border-radius: 6px;
+  background: rgba(255, 183, 3, 0.1);
+  border: 1px solid rgba(255, 183, 3, 0.2);
+  font-size: 0.85rem;
+  text-align: center;
+  color: #ffb703;
+}
+
+.icon-sm {
+  width: 16px;
+  height: 16px;
+}
+

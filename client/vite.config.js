@@ -1,7 +1,8 @@
 import { defineConfig } from 'vite';
+import solidPlugin from 'vite-plugin-solid';
 
 export default defineConfig({
-  // O .env fica na raiz do projeto, não dentro de client/.
+  plugins: [solidPlugin()],
   envDir: '..',
   server: {
     port: 5173,
