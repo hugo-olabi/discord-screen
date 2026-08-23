@@ -140,7 +140,14 @@ def main():
         print("  ✅ Transmissão nativa conectada via WebCodecs + WebSocket! Pressione Ctrl+C para encerrar.\n")
         try:
             while True:
-                await asyncio.sleep(1)
+                await asyncio.sleep(2)
+                if cf_proc and cf_proc.poll() is not None:
+                    print("\n  ⚠️ [Cloudflared] O túnel foi encerrado inesperadamente. Reinicializando túnel...")
+                    cf_proc, cf_url = iniciar_tunel_cloudflared(porta_real)
+                    if cf_url:
+                        tunnel_public_url = cf_url
+                        print(f"  [Transmissão] Novo túnel WebSocket ativado: {tunnel_public_url}")
+                        atualizar_url_tunel_supabase(token, tunnel_public_url, status="live")
         finally:
             video_task.cancel()
             await ws_runner.cleanup()

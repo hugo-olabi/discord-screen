@@ -1378,7 +1378,9 @@ let wsReconnectAttempts = 0;
 const MAX_WS_RECONNECT_ATTEMPTS = 5;
 
 
-function stopWebCodecsWebSocket() {
+const failedTunnelUrls = new Set();
+
+function stopWebCodecsWebSocket(keepFailedHistory = true) {
   if (reconnectTimeout) {
     clearTimeout(reconnectTimeout);
     reconnectTimeout = null;
@@ -1395,6 +1397,9 @@ function stopWebCodecsWebSocket() {
   }
   currentWsUrl = null;
   wsReconnectAttempts = 0;
+  if (!keepFailedHistory) {
+    failedTunnelUrls.clear();
+  }
   closeAllStreams();
   available.clear();
   watching.clear();
@@ -1403,9 +1408,17 @@ function stopWebCodecsWebSocket() {
 }
 
 
-function connectWebCodecsWebSocket(wsUrl) {
+function connectWebCodecsWebSocket(wsUrl, forceRetry = false) {
   if (!wsUrl) {
-    stopWebCodecsWebSocket();
+    stopWebCodecsWebSocket(false);
+    return;
+  }
+
+  if (forceRetry) {
+    failedTunnelUrls.delete(wsUrl);
+  }
+
+  if (failedTunnelUrls.has(wsUrl)) {
     return;
   }
 
@@ -1414,7 +1427,7 @@ function connectWebCodecsWebSocket(wsUrl) {
   }
 
   if (currentWsUrl !== wsUrl) {
-    stopWebCodecsWebSocket();
+    stopWebCodecsWebSocket(true);
   }
 
   currentWsUrl = wsUrl;
@@ -1429,6 +1442,7 @@ function connectWebCodecsWebSocket(wsUrl) {
     ws.onopen = () => {
       if (currentWs !== ws) return;
       wsReconnectAttempts = 0;
+      failedTunnelUrls.delete(wsUrl);
       if (reconnectTimeout) clearTimeout(reconnectTimeout);
 
       participants = [{ id: 'streamer', name: 'Transmissão Nativa', broadcasting: true }];
@@ -1484,7 +1498,8 @@ function connectWebCodecsWebSocket(wsUrl) {
         wsReconnectAttempts++;
         if (wsReconnectAttempts > MAX_WS_RECONNECT_ATTEMPTS) {
           console.warn(`[WebSocket notice] Túnel Cloudflare inacessível após ${MAX_WS_RECONNECT_ATTEMPTS} tentativas. Interrompendo reconexão até novo túnel.`);
-          stopWebCodecsWebSocket();
+          failedTunnelUrls.add(wsUrl);
+          stopWebCodecsWebSocket(true);
           setEmpty('Túnel Inacessível ⚠️', 'O túnel de transmissão expirou ou caiu. Aguardando novo túnel...');
           return;
         }
@@ -1503,6 +1518,8 @@ function connectWebCodecsWebSocket(wsUrl) {
       reconnectTimeout = setTimeout(() => {
         connectWebCodecsWebSocket(wsUrl);
       }, delay);
+    } else {
+      failedTunnelUrls.add(wsUrl);
     }
   }
 }
@@ -1517,7 +1534,7 @@ async function subscribeViewerToSupabaseRoom(roomId) {
     if (roomData.tunnel_url) {
       connectWebCodecsWebSocket(roomData.tunnel_url);
     } else {
-      stopWebCodecsWebSocket();
+      stopWebCodecsWebSocket(false);
       setEmpty('Aguardando Transmissão Nativa...', `ID da Sala: ${roomId}`);
     }
   };
