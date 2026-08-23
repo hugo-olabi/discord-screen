@@ -110,8 +110,27 @@ def main():
     else:
         print("  Modo de Teste Acelerado: Gerando transmissao sintetica de Ruido Branco (White Noise)...")
 
+    audio_source = "system"
+    for arg in args:
+        if arg.startswith("--audio-source="):
+            audio_source = arg.replace("--audio-source=", "").lower()
+        elif arg == "--no-audio":
+            audio_source = "none"
+
+    if not use_noise and audio_source == "system":
+        print("\n  Escolha a fonte de áudio:")
+        print("    1) Áudio do Sistema (Desktop / Geral)")
+        print("    2) Áudio do Aplicativo Selecionado")
+        print("    3) Microfone")
+        print("    4) Sem Áudio")
+        a_choice = input("  Selecione a fonte de áudio [1-4] (Padrão 1): ").strip()
+        if a_choice == "2": audio_source = "app"
+        elif a_choice == "3": audio_source = "mic"
+        elif a_choice == "4": audio_source = "none"
+
     print(f"\n  Servidor: {server_url}")
-    print(f"  Perfil de Qualidade: {profile.upper()} (Zero-Latency / Static Deduplication)...\n")
+    print(f"  Perfil de Qualidade: {profile.upper()} (Zero-Latency / Static Deduplication)")
+    print(f"  Captura de Áudio: {audio_source.upper()}\n")
 
     async def run():
         cap_res = await iniciar_processo_captura(
@@ -123,12 +142,22 @@ def main():
             print("  ❌ Erro ao iniciar processo de captura de vídeo.")
             return
 
-        from ws_server import iniciar_servidor_ws, streamer_video_loop
+        audio_proc = None
+        if audio_source != "none" and not use_noise:
+            try:
+                audio_proc = await iniciar_processo_captura_audio(
+                    audio_source=audio_source, source_name=selected_name, is_screen=is_screen
+                )
+            except Exception as ea:
+                print(f"  ⚠️ Não foi possível iniciar áudio ({audio_source}): {ea}")
+
+        from ws_server import iniciar_servidor_ws, streamer_video_loop, streamer_audio_loop
         from cloudflared_tunnel import iniciar_tunel_cloudflared
         from supabase_client import atualizar_url_tunel_supabase, SUPABASE_URL, SUPABASE_ANON_KEY
 
         ws_runner, porta_real = await iniciar_servidor_ws(3001)
         video_task = asyncio.create_task(streamer_video_loop(out_stream))
+        audio_task = asyncio.create_task(streamer_audio_loop(audio_proc.stdout)) if (audio_proc and audio_proc.stdout) else None
 
         cf_proc, cf_url = iniciar_tunel_cloudflared(porta_real)
         tunnel_public_url = cf_url if cf_url else f"ws://127.0.0.1:{porta_real}/ws"
@@ -150,7 +179,12 @@ def main():
                         atualizar_url_tunel_supabase(token, tunnel_public_url, status="live")
         finally:
             video_task.cancel()
+            if audio_task:
+                audio_task.cancel()
             await ws_runner.cleanup()
+            if audio_proc:
+                try: audio_proc.terminate()
+                except Exception: pass
             if cf_proc:
                 try: cf_proc.terminate()
                 except Exception: pass

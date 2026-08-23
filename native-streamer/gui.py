@@ -76,16 +76,21 @@ class RecordingSetupModal(Gtk.Window):
         fps_box.append(self.fps_15)
         main_box.append(fps_box)
 
-        # Audio Stream Toggle section
+        # Audio Source Dropdown section
         audio_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         audio_box.set_halign(Gtk.Align.CENTER)
         
-        audio_label = Gtk.Label(label="Stream Audio")
-        self.audio_switch = Gtk.Switch()
-        self.audio_switch.set_active(True)
+        audio_label = Gtk.Label(label="Audio Source:")
+        self.audio_dropdown = Gtk.DropDown.new_from_strings([
+            "System Audio (Desktop)",
+            "App Audio (Selected Window)",
+            "Microphone",
+            "Disabled (No Audio)"
+        ])
+        self.audio_dropdown.set_selected(0)
 
         audio_box.append(audio_label)
-        audio_box.append(self.audio_switch)
+        audio_box.append(self.audio_dropdown)
         main_box.append(audio_box)
 
         # Bottom Stream Action button (disabled until source selected)
@@ -141,7 +146,8 @@ class RecordingSetupModal(Gtk.Window):
 
     def on_stream_clicked(self, btn):
         fps = 60 if self.fps_60.get_active() else (15 if self.fps_15.get_active() else 30)
-        stream_audio = self.audio_switch.get_active()
+        audio_map = {0: "system", 1: "app", 2: "mic", 3: "none"}
+        audio_source = audio_map.get(self.audio_dropdown.get_selected(), "system")
 
         config = {
             "pipewire_node": self.pipewire_node,
@@ -150,7 +156,8 @@ class RecordingSetupModal(Gtk.Window):
             "window_id": self.selected_window_id,
             "source_name": self.selected_source_name,
             "fps": fps,
-            "stream_audio": stream_audio
+            "audio_source": audio_source,
+            "stream_audio": audio_source != "none"
         }
 
         self.close()
@@ -163,6 +170,7 @@ class StreamerAppWindow(Gtk.ApplicationWindow):
         self.set_default_size(520, 440)
 
         self.processo_captura = None
+        self.processo_captura_audio = None
         self.is_streaming = False
         self.current_config = None
         self.target_url_or_token = initial_token or ""
@@ -196,7 +204,7 @@ class StreamerAppWindow(Gtk.ApplicationWindow):
             font-weight: bold;
         }
         .title-2 {
-            font-size: 17px;
+            font-size: 16px;
             font-weight: bold;
         }
         .muted-text {
@@ -266,7 +274,7 @@ class StreamerAppWindow(Gtk.ApplicationWindow):
         box2.set_margin_start(24)
         box2.set_margin_end(24)
 
-        header_title = Gtk.Label(label="Stream Status")
+        header_title = Gtk.Label(label="Stream Control")
         header_title.add_css_class("title-1")
         header_title.set_halign(Gtk.Align.START)
         box2.append(header_title)
@@ -346,10 +354,11 @@ class StreamerAppWindow(Gtk.ApplicationWindow):
             server_url = f"{parsed.scheme}://{parsed.netloc}"
             token = urllib.parse.parse_qs(parsed.query).get("t", [token_input])[0]
 
+        audio_src = config.get("audio_source", "system").upper()
         self.val_status.set_text("Connecting...")
         self.val_source.set_text(config.get("source_name") or "Selected Window")
         self.val_fps.set_text(f"{config.get('fps', 30)} FPS")
-        self.val_audio.set_text("Enabled" if config.get("stream_audio") else "Disabled")
+        self.val_audio.set_text(audio_src if audio_src != "NONE" else "Disabled")
         self.val_res.set_text("1080p")
         self.val_lag.set_text("Calculating...")
 
@@ -359,7 +368,6 @@ class StreamerAppWindow(Gtk.ApplicationWindow):
         def run_loop():
             async def run_async():
                 cap_res = await iniciar_processo_captura(
-
                     pipewire_node=config.get("pipewire_node"),
                     pipewire_fd=config.get("pipewire_fd"),
                     fps=config.get("fps", 60),
@@ -376,9 +384,11 @@ class StreamerAppWindow(Gtk.ApplicationWindow):
                 self.processo_captura = cp
 
                 audio_proc = None
-                if config.get("stream_audio"):
+                audio_source = config.get("audio_source", "system")
+                if audio_source != "none":
                     try:
                         audio_proc = await iniciar_processo_captura_audio(
+                            audio_source=audio_source,
                             source_name=config.get("source_name"),
                             is_screen=config.get("is_screen", True)
                         )
@@ -386,12 +396,13 @@ class StreamerAppWindow(Gtk.ApplicationWindow):
                     except Exception as ea:
                         sys.stderr.write(f"\n[Audio] Error starting audio capture: {ea}\n")
 
-                from ws_server import iniciar_servidor_ws, streamer_video_loop
+                from ws_server import iniciar_servidor_ws, streamer_video_loop, streamer_audio_loop
                 from cloudflared_tunnel import iniciar_tunel_cloudflared
                 from supabase_client import atualizar_url_tunel_supabase
 
                 ws_runner, porta_real = await iniciar_servidor_ws(3001)
                 video_task = asyncio.create_task(streamer_video_loop(out_stream))
+                audio_task = asyncio.create_task(streamer_audio_loop(audio_proc.stdout)) if (audio_proc and audio_proc.stdout) else None
 
                 cf_proc, cf_url = iniciar_tunel_cloudflared(porta_real)
                 tunnel_public_url = cf_url if cf_url else f"ws://127.0.0.1:{porta_real}/ws"
@@ -405,7 +416,12 @@ class StreamerAppWindow(Gtk.ApplicationWindow):
                         await asyncio.sleep(1)
                 finally:
                     video_task.cancel()
+                    if audio_task:
+                        audio_task.cancel()
                     await ws_runner.cleanup()
+                    if audio_proc:
+                        try: audio_proc.terminate()
+                        except Exception: pass
                     if cf_proc:
                         try: cf_proc.terminate()
                         except Exception: pass

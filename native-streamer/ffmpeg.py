@@ -140,56 +140,75 @@ async def iniciar_processo_captura(pipewire_node: str | None = None, pipewire_fd
     cp = ChainedProcess(proc)
     return cp, proc.stdout, proc.stderr
 
-def obter_dispositivo_audio(source_name: str | None = None, is_screen: bool = True) -> str:
+def obter_dispositivo_audio(audio_source: str = "system", source_name: str | None = None, is_screen: bool = True) -> str | None:
     """
-    Se is_screen=True: devolve o monitor do sink padrao de saida de audio do sistema (<default_sink>.monitor ou @DEFAULT_MONITOR@).
-    Se is_screen=False: procura o sink-input da janela do aplicativo ou faz fallback para o audio do sistema.
+    audio_source:
+      - 'system': Áudio do Sistema (Monitor principal de áudio)
+      - 'app': Áudio do Aplicativo selecionado (Monitor do Sink Input)
+      - 'mic': Microfone / Entrada de áudio
+      - 'none': Sem áudio
     """
-    if is_screen or not source_name:
+    if audio_source == "none":
+        return None
+
+    if audio_source == "mic":
         try:
-            res = subprocess.run(['pactl', 'get-default-sink'], capture_output=True, text=True, timeout=2)
+            res = subprocess.run(['pactl', 'get-default-source'], capture_output=True, text=True, timeout=2)
             ds = res.stdout.strip()
-            if ds: return f"{ds}.monitor"
+            if ds: return ds
         except Exception: pass
+        return "@DEFAULT_SOURCE@"
 
+    if audio_source == "app" and source_name and not is_screen:
+        name_lower = source_name.lower()
         try:
-            res = subprocess.run(['pactl', 'list', 'sinks', 'short'], capture_output=True, text=True, timeout=2)
+            res = subprocess.run(['pactl', 'list', 'sink-inputs'], capture_output=True, text=True, timeout=2)
+            current = {}
             for line in res.stdout.splitlines():
-                parts = line.split('\t')
-                if len(parts) >= 5 and parts[4] == 'RUNNING':
-                    return f"{parts[1]}.monitor"
+                line = line.strip()
+                if line.startswith('Sink Input #'):
+                    if current:
+                        app = current.get('application.name', '').lower()
+                        bin_name = current.get('application.process.binary', '').lower()
+                        if (app and app in name_lower) or (bin_name and bin_name in name_lower) or (app and name_lower in app):
+                            return f"sink-input-{current['id']}.monitor"
+                    current = {'id': line.split('#')[1]}
+                elif '=' in line:
+                    k, v = line.split('=', 1)
+                    current[k.strip()] = v.strip().strip('"')
+            if current:
+                app = current.get('application.name', '').lower()
+                bin_name = current.get('application.process.binary', '').lower()
+                if (app and app in name_lower) or (bin_name and bin_name in name_lower) or (app and name_lower in app):
+                    return f"sink-input-{current['id']}.monitor"
         except Exception: pass
 
-        return "@DEFAULT_MONITOR@"
-
-    name_lower = source_name.lower()
+    # Fallback / Padrao: Sistema (Desktop Output)
     try:
-        res = subprocess.run(['pactl', 'list', 'sink-inputs'], capture_output=True, text=True, timeout=2)
-        current = {}
-        for line in res.stdout.splitlines():
-            line = line.strip()
-            if line.startswith('Sink Input #'):
-                if current:
-                    app = current.get('application.name', '').lower()
-                    bin_name = current.get('application.process.binary', '').lower()
-                    if (app and app in name_lower) or (bin_name and bin_name in name_lower) or (app and name_lower in app):
-                        return f"sink-input-{current['id']}.monitor"
-                current = {'id': line.split('#')[1]}
-            elif '=' in line:
-                k, v = line.split('=', 1)
-                current[k.strip()] = v.strip().strip('"')
-        if current:
-            app = current.get('application.name', '').lower()
-            bin_name = current.get('application.process.binary', '').lower()
-            if (app and app in name_lower) or (bin_name and bin_name in name_lower) or (app and name_lower in app):
-                return f"sink-input-{current['id']}.monitor"
+        res = subprocess.run(['pactl', 'get-default-sink'], capture_output=True, text=True, timeout=2)
+        ds = res.stdout.strip()
+        if ds: return f"{ds}.monitor"
     except Exception: pass
 
-    return obter_dispositivo_audio(is_screen=True)
+    try:
+        res = subprocess.run(['pactl', 'list', 'sinks', 'short'], capture_output=True, text=True, timeout=2)
+        for line in res.stdout.splitlines():
+            parts = line.split('\t')
+            if len(parts) >= 5 and parts[4] == 'RUNNING':
+                return f"{parts[1]}.monitor"
+    except Exception: pass
 
-async def iniciar_processo_captura_audio(source_name: str | None = None, is_screen: bool = True):
-    dev = obter_dispositivo_audio(source_name=source_name, is_screen=is_screen)
-    sys.stderr.write(f"\n[Audio] Capturando áudio de ({'Screen/Sistema' if is_screen else 'Window/App'}): {dev}\n")
+    return "@DEFAULT_MONITOR@"
+
+async def iniciar_processo_captura_audio(audio_source: str = "system", source_name: str | None = None, is_screen: bool = True):
+    if audio_source == "none":
+        return None
+
+    dev = obter_dispositivo_audio(audio_source=audio_source, source_name=source_name, is_screen=is_screen)
+    if not dev:
+        return None
+
+    sys.stderr.write(f"\n[Audio] Capturando áudio ({audio_source}): {dev}\n")
     ff_cmd = [
         "ffmpeg", "-loglevel", "warning",
         "-f", "pulse", "-i", dev,

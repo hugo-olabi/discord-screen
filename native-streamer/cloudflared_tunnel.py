@@ -21,17 +21,26 @@ def obter_caminho_cloudflared() -> str:
 
     return "cloudflared"
 
-def aguardar_dns_tunel_pronto(url: str, max_tentativas: int = 15) -> bool:
-    sys.stdout.write("  [Cloudflared] Aguardando propagação DNS global...")
+def aguardar_dns_tunel_pronto(url: str, max_tentativas: int = 20) -> bool:
+    sys.stdout.write("  [Cloudflared] Aguardando propagação DNS e roteamento WebSocket...")
     sys.stdout.flush()
+    health_url = f"{url}/health"
+    consecutive_success = 0
     for _ in range(max_tentativas):
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"}, method="GET")
+            req = urllib.request.Request(health_url, headers={"User-Agent": "Mozilla/5.0"}, method="GET")
             with urllib.request.urlopen(req, timeout=3) as resp:
-                if resp.status < 500:
-                    print(" OK!")
-                    return True
+                if resp.status == 200:
+                    consecutive_success += 1
+                    sys.stdout.write("✓")
+                    sys.stdout.flush()
+                    if consecutive_success >= 2:
+                        print(" OK!")
+                        return True
+                else:
+                    consecutive_success = 0
         except Exception:
+            consecutive_success = 0
             sys.stdout.write(".")
             sys.stdout.flush()
             time.sleep(1)

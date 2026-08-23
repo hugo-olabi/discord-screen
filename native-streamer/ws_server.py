@@ -12,6 +12,7 @@ clients = set()
 active_out_stream = None
 active_audio_stream = None
 video_config = {"codec": "vp8", "codedWidth": 1280, "codedHeight": 720, "fps": 30}
+audio_config = {"codec": "opus", "sampleRate": 48000, "numberOfChannels": 2}
 
 def empacotar_pacote_midia(slot: int, is_keyframe: bool, pts_us: float, payload: bytes, tipo: int = -1) -> bytes:
     """
@@ -37,9 +38,10 @@ async def handle_ws(request):
     logger.info(f"⚡ Cliente WebSocket conectado: {request.remote}")
 
     try:
-        # Envia mensagem inicial de boas-vindas com a configuração do WebCodecs
+        # Envia mensagem inicial de boas-vindas com a configuração do WebCodecs de vídeo e áudio
         await ws.send_json({"type": "welcome", "slot": 0})
         await ws.send_json({"type": "config", "config": video_config})
+        await ws.send_json({"type": "audio-config", "config": audio_config})
 
         async for msg in ws:
             if msg.type == WSMsgType.TEXT:
@@ -115,6 +117,52 @@ async def streamer_video_loop(out_stream):
         pass
     except Exception as e:
         logger.debug(f"Loop de vídeo encerrado: {e}")
+
+async def streamer_audio_loop(audio_stream):
+    """Lê pacotes Ogg Opus do FFmpeg e transmite quadros tipo=3 para os clientes WebSocket."""
+    if not audio_stream:
+        return
+    start_audio_time = time.time()
+    ultimo_audio_pts = -1
+    try:
+        while True:
+            header = await audio_stream.readexactly(27)
+            if header[:4] != b'OggS':
+                chunk = header + await audio_stream.read(485)
+                if not chunk:
+                    break
+                now_pts = int((time.time() - start_audio_time) * 1_000_000)
+                if now_pts <= ultimo_audio_pts:
+                    now_pts = ultimo_audio_pts + 1
+                ultimo_audio_pts = now_pts
+                packet = empacotar_pacote_midia(0, False, now_pts, chunk, tipo=3)
+                await broadcast_bytes(packet)
+                continue
+
+            num_segments = header[26]
+            seg_table = await audio_stream.readexactly(num_segments)
+            payload_len = sum(seg_table)
+            payload = await audio_stream.readexactly(payload_len)
+
+            offset = 0
+            pkt = bytearray()
+            for seg_len in seg_table:
+                pkt.extend(payload[offset:offset + seg_len])
+                offset += seg_len
+                if seg_len < 255:
+                    if len(pkt) > 0 and not pkt.startswith(b'OpusHead') and not pkt.startswith(b'OpusTags'):
+                        now_pts = int((time.time() - start_audio_time) * 1_000_000)
+                        if now_pts <= ultimo_audio_pts:
+                            now_pts = ultimo_audio_pts + 1
+                        ultimo_audio_pts = now_pts
+
+                        packet = empacotar_pacote_midia(0, False, now_pts, bytes(pkt), tipo=3)
+                        await broadcast_bytes(packet)
+                    pkt = bytearray()
+    except asyncio.IncompleteReadError:
+        pass
+    except Exception as e:
+        logger.debug(f"Loop de áudio encerrado: {e}")
 
 
 async def iniciar_servidor_ws(porta: int = 3001) -> tuple[web.AppRunner, int]:

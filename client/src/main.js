@@ -1375,7 +1375,7 @@ let currentWsUrl = null;
 let currentPlayer = null;
 let reconnectTimeout = null;
 let wsReconnectAttempts = 0;
-const MAX_WS_RECONNECT_ATTEMPTS = 5;
+const MAX_WS_RECONNECT_ATTEMPTS = 15;
 
 
 const failedTunnelUrls = new Set();
@@ -1432,7 +1432,8 @@ function connectWebCodecsWebSocket(wsUrl, forceRetry = false) {
 
   currentWsUrl = wsUrl;
 
-  setEmpty('Conectando WebSocket... ⚡', `Túnel: ${wsUrl}`);
+  const attemptText = wsReconnectAttempts > 0 ? ` (Tentativa ${wsReconnectAttempts + 1}/${MAX_WS_RECONNECT_ATTEMPTS})` : '';
+  setEmpty(`Conectando WebSocket... ⚡${attemptText}`, `Túnel: ${wsUrl}`);
 
   try {
     const ws = new WebSocket(wsUrl);
@@ -1504,7 +1505,8 @@ function connectWebCodecsWebSocket(wsUrl, forceRetry = false) {
           return;
         }
 
-        const delay = Math.min(1500 * wsReconnectAttempts, 6000);
+        setEmpty(`Propagando Conexão Cloudflare... ⚡`, `Aguardando propagação DNS Edge (${wsReconnectAttempts}/${MAX_WS_RECONNECT_ATTEMPTS})...`);
+        const delay = Math.min(1500 * wsReconnectAttempts, 4000);
         reconnectTimeout = setTimeout(() => {
           connectWebCodecsWebSocket(wsUrl);
         }, delay);
@@ -1514,7 +1516,7 @@ function connectWebCodecsWebSocket(wsUrl, forceRetry = false) {
     if (reconnectTimeout) clearTimeout(reconnectTimeout);
     wsReconnectAttempts++;
     if (wsReconnectAttempts <= MAX_WS_RECONNECT_ATTEMPTS) {
-      const delay = Math.min(1500 * wsReconnectAttempts, 6000);
+      const delay = Math.min(1500 * wsReconnectAttempts, 4000);
       reconnectTimeout = setTimeout(() => {
         connectWebCodecsWebSocket(wsUrl);
       }, delay);
