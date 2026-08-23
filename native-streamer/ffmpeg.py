@@ -261,8 +261,8 @@ def montar_comando_ffmpeg(fps: int = 30, bitrate: str = "2500k", window_id: str 
     else:
         cmd.extend(["-f", "x11grab", "-framerate", str(fps), "-i", ":0.0"])
 
-    # Filtro de downscaling para max 1080p + deduplicacao de quadros estaticos (mpdecimate)
-    cmd.extend(["-vf", "scale='min(1920,iw)':-2:flags=lanczos,mpdecimate"])
+    # Filtro de downscaling para max 1080p mantendo framerate constante e fluido
+    cmd.extend(["-vf", "scale='min(1920,iw)':-2:flags=lanczos"])
 
     # Selecionar o melhor codec suportado para o container IVF (VP9 > VP8)
     if tem_ffmpeg_encoder("libvpx-vp9"):
