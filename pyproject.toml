@@ -1,7 +1,7 @@
 [project]
-name = "discord-screen"
+name = "streamroom"
 version = "0.2.0"
-description = "Transmissão nativa de tela e áudio do sistema para o Discord Activity via WebCodecs e GTK4"
+description = "Transmissão nativa de tela e áudio do sistema para o StreamRoom via WebCodecs e GTK4"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

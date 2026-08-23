@@ -1,4 +1,4 @@
-# Imagem estática da Sala de Tela.
+# Imagem estática do StreamRoom.
 
 FROM node:22-slim AS build
 

@@ -1829,7 +1829,7 @@ function opcoesDaFonte() {
  * clique lá, porque getDisplayMedia exige gesto do usuário.
  */
 /** Nome da aba de captura, para reencontrá-la em vez de empilhar outra. */
-const JANELA_CAPTURA = 'discord-screen-captura';
+const JANELA_CAPTURA = 'streamroom-captura';
 
 function ligarFonte(fonte) {
   if (abaAberta()) return trazerAba(fonte);
@@ -2025,7 +2025,7 @@ async function openNativeStreamerModal() {
         id: shareToken,
         guild_id: session?.guildId || '',
         channel_id: session?.channelId || '',
-        name: 'Sala de Tela',
+        name: 'StreamRoom',
 
         streamer_id: session?.user?.id || '',
         status: 'waiting',

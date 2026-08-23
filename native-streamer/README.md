@@ -36,7 +36,7 @@ npm run stream -- --token=<TOKEN> --fps=60 --bitrate=4000k --hwaccel=nvenc
 | Parâmetro | Padrão | Descrição |
 | --- | --- | --- |
 | `--token` | Auto-gerado | Token de transmissão da sala. |
-| `--server` | `http://localhost:3001` | Endereço do servidor `discord-screen`. |
+| `--server` | `http://localhost:3001` | Endereço do servidor `streamroom`. |
 | `--fps` | `30` | Taxa de quadros (FPS) da captura. |
 | `--bitrate` | `2500k` | Taxa de transmissão de vídeo. |
 | `--hwaccel` | `auto` | Aceleração por GPU (`auto`, `nvenc`, `vaapi`, `qsv`). |

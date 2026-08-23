@@ -1,6 +1,6 @@
 # Hospedar num VPS
 
-Este é o caminho recomendado para deixar a Sala de Tela no ar sem depender do
+Este é o caminho recomendado para deixar o StreamRoom no ar sem depender do
 computador de ninguém. O programa é um relay de vídeo: a saída é
 `bitrate × espectadores`, e isso não cabe bem em hospedagem compartilhada. Um
 VPS pequeno — 1 vCPU, 2 GB, tráfego generoso — resolve por poucos euros ao mês.

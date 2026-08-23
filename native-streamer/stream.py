@@ -54,7 +54,7 @@ def main():
             print(f"Interface GTK4 nao pode ser carregada: {e}. Alternando para CLI...")
 
     print("\n============================================================")
-    print("           TRANSMISSOR NATIVO DISCORD-SCREEN (PYTHON)      ")
+    print("           TRANSMISSOR NATIVO STREAMROOM (PYTHON)          ")
     print("============================================================\n")
 
     if not token_input:
@@ -64,12 +64,8 @@ def main():
         print("  ERRO: Token de transmissão não informado.")
         sys.exit(1)
 
-    token = token_input
-    if "t=" in token_input:
-        from urllib.parse import urlparse, parse_qs
-        parsed = urlparse(token_input)
-        server_url = f"{parsed.scheme}://{parsed.netloc}"
-        token = parse_qs(parsed.query).get("t", [token_input])[0]
+    from gui import extrair_token_da_url
+    token = extrair_token_da_url(token_input)
 
     pipewire_node, pipewire_fd = None, None
     selected_window = None

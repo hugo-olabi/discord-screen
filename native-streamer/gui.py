@@ -16,9 +16,25 @@ from janelas import listar_janelas
 from portal import obter_pipewire_fd_e_node
 from ffmpeg import iniciar_processo_captura, iniciar_processo_captura_audio
 from supabase_client import atualizar_url_tunel_supabase
+import ws_server
+from cloudflared_tunnel import iniciar_tunel_cloudflared
 
 
-
+def extrair_token_da_url(token_input: str) -> str:
+    """Extrai o ID da sala limpo de qualquer URL (sala=, t=, room=, id=) ou retorna o token bruto."""
+    if not token_input:
+        return ""
+    token_input = token_input.strip()
+    if "://" in token_input or "?" in token_input:
+        try:
+            parsed = urllib.parse.urlparse(token_input)
+            qs = urllib.parse.parse_qs(parsed.query)
+            for param in ["sala", "t", "room", "id"]:
+                if param in qs and qs[param]:
+                    return qs[param][0]
+        except Exception:
+            pass
+    return token_input
 
 
 class RecordingSetupModal(Gtk.Window):
@@ -35,11 +51,13 @@ class RecordingSetupModal(Gtk.Window):
         self.selected_window_id = None
         self.selected_source_name = None
 
-        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
-        main_box.set_margin_top(20)
-        main_box.set_margin_bottom(20)
-        main_box.set_margin_start(24)
-        main_box.set_margin_end(24)
+        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        main_box.set_margin_top(16)
+        main_box.set_margin_bottom(16)
+        main_box.set_margin_start(20)
+        main_box.set_margin_end(20)
+        main_box.set_halign(Gtk.Align.CENTER)
+        main_box.set_valign(Gtk.Align.CENTER)
         self.set_child(main_box)
 
         title = Gtk.Label(label="Recording Setup")
@@ -47,8 +65,8 @@ class RecordingSetupModal(Gtk.Window):
         main_box.append(title)
 
         # Big horizontal rectangle button for selecting window/screen
-        self.select_btn = Gtk.Button(label="Select window/screen")
-        self.select_btn.set_size_request(-1, 64)
+        self.select_btn = Gtk.Button(label="Select Window or Screen")
+        self.select_btn.set_size_request(360, 56)
         self.select_btn.add_css_class("big-select-btn")
         self.select_btn.connect("clicked", self.on_select_source_clicked)
         main_box.append(self.select_btn)
@@ -108,8 +126,8 @@ class RecordingSetupModal(Gtk.Window):
         profile_box.append(self.profile_dropdown)
         main_box.append(profile_box)
 
-        # Bottom Stream Action button (disabled until source selected)
-        self.stream_btn = Gtk.Button(label="Stream")
+        # Bottom Stream Action button
+        self.stream_btn = Gtk.Button(label="Start Streaming")
         self.stream_btn.add_css_class("suggested-action")
         self.stream_btn.set_sensitive(False)
         self.stream_btn.connect("clicked", self.on_stream_clicked)
@@ -182,14 +200,23 @@ class RecordingSetupModal(Gtk.Window):
 
 class StreamerAppWindow(Gtk.ApplicationWindow):
     def __init__(self, app, initial_token=None):
-        super().__init__(application=app, title="Discord Screen Streamer")
-        self.set_default_size(520, 440)
+        super().__init__(application=app, title="StreamRoom Streamer")
+        self.set_default_size(480, 420)
+        self.set_resizable(False)
 
         self.processo_captura = None
         self.processo_captura_audio = None
+        self.video_task = None
+        self.audio_task = None
         self.is_streaming = False
         self.current_config = None
         self.target_url_or_token = initial_token or ""
+        self.active_room_token = None
+
+        self.persistent_tunnel_url = None
+        self.persistent_cf_proc = None
+        self.persistent_ws_runner = None
+        self.persistent_loop = None
 
         self.setup_custom_css()
 
@@ -200,6 +227,9 @@ class StreamerAppWindow(Gtk.ApplicationWindow):
 
         self.build_page1()
         self.build_page2()
+
+        # Pre-warm Cloudflare Tunnel immediately on app launch
+        self.prewarm_persistent_tunnel()
 
         # Auto-skip to Page 2 if initial token provided
         if self.target_url_or_token:
@@ -214,28 +244,42 @@ class StreamerAppWindow(Gtk.ApplicationWindow):
         window {
             background-color: #1e1e2e;
             color: #cdd6f4;
+            font-family: system-ui, -apple-system, sans-serif;
         }
         .title-1 {
             font-size: 20px;
             font-weight: bold;
+            color: #cba6f7;
         }
         .title-2 {
-            font-size: 16px;
+            font-size: 15px;
             font-weight: bold;
+            color: #cdd6f4;
         }
         .muted-text {
             color: #a6adc8;
-            font-size: 13px;
+            font-size: 12px;
         }
         .card-box {
-            background-color: rgba(255, 255, 255, 0.05);
-            border-radius: 10px;
+            background-color: #181825;
+            border: 1px solid #313244;
+            border-radius: 12px;
             padding: 16px;
         }
+        .tunnel-badge {
+            background-color: #313244;
+            color: #a6e3a1;
+            border-radius: 20px;
+            padding: 6px 14px;
+            font-size: 12px;
+            font-weight: 600;
+        }
         .big-select-btn {
-            font-size: 15px;
+            font-size: 14px;
             font-weight: bold;
-            border-radius: 8px;
+            border-radius: 10px;
+            background-color: #313244;
+            color: #cdd6f4;
         }
         """
         provider.load_from_data(css.encode('utf-8'))
@@ -245,26 +289,73 @@ class StreamerAppWindow(Gtk.ApplicationWindow):
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
         )
 
+    def prewarm_persistent_tunnel(self):
+        def prewarm_worker():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            self.persistent_loop = loop
+
+            async def start_server_and_tunnel():
+                ws_runner, porta_real = await ws_server.iniciar_servidor_ws(3001)
+                self.persistent_ws_runner = ws_runner
+
+                cf_proc, cf_url = iniciar_tunel_cloudflared(porta_real)
+                self.persistent_cf_proc = cf_proc
+                self.persistent_tunnel_url = cf_url if cf_url else f"ws://127.0.0.1:{porta_real}/ws"
+
+                GLib.idle_add(lambda: self.tunnel_badge.set_text(f"⚡ Tunnel Ready: {self.persistent_tunnel_url.replace('wss://', '').replace('ws://', '').split('/')[0]}"))
+
+                # Se a transmissão já foi iniciada enquanto o túnel estava aquecendo, atualiza o Supabase agora com o URL público definitivo
+                if self.active_room_token:
+                    atualizar_url_tunel_supabase(self.active_room_token, self.persistent_tunnel_url, status="live")
+
+                try:
+                    while True:
+                        await asyncio.sleep(1)
+                except asyncio.CancelledError:
+                    pass
+                finally:
+                    await ws_runner.cleanup()
+                    if cf_proc:
+                        try: cf_proc.terminate()
+                        except Exception: pass
+
+            try:
+                loop.run_until_complete(start_server_and_tunnel())
+            except Exception as e:
+                sys.stderr.write(f"\n[Tunnel Prewarm Error]: {e}\n")
+
+        threading.Thread(target=prewarm_worker, daemon=True).start()
+
     # ------------------------------------------------------------------ PAGE 1
     def build_page1(self):
-        box1 = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
-        box1.set_margin_top(40)
-        box1.set_margin_bottom(40)
-        box1.set_margin_start(40)
-        box1.set_margin_end(40)
+        box1 = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+        box1.set_margin_top(24)
+        box1.set_margin_bottom(24)
+        box1.set_margin_start(32)
+        box1.set_margin_end(32)
+        box1.set_halign(Gtk.Align.CENTER)
         box1.set_valign(Gtk.Align.CENTER)
 
-        lbl_token = Gtk.Label(label="Link - Token")
-        lbl_token.set_halign(Gtk.Align.START)
-        lbl_token.add_css_class("title-2")
-        box1.append(lbl_token)
+        lbl_title = Gtk.Label(label="StreamRoom Streamer")
+        lbl_title.add_css_class("title-1")
+        box1.append(lbl_title)
+
+        lbl_sub = Gtk.Label(label="Zero-Latency Native WebCodecs Streaming")
+        lbl_sub.add_css_class("muted-text")
+        box1.append(lbl_sub)
+
+        self.tunnel_badge = Gtk.Label(label="Warming Tunnel... ⚡")
+        self.tunnel_badge.add_css_class("tunnel-badge")
+        box1.append(self.tunnel_badge)
 
         self.entry_input = Gtk.Entry()
         self.entry_input.set_placeholder_text("Enter room share URL or token...")
+        self.entry_input.set_size_request(340, -1)
         self.entry_input.connect("changed", self.on_entry_changed)
         box1.append(self.entry_input)
 
-        self.join_btn = Gtk.Button(label="Join")
+        self.join_btn = Gtk.Button(label="Join & Setup Stream")
         self.join_btn.add_css_class("suggested-action")
         self.join_btn.set_sensitive(False)
         self.join_btn.connect("clicked", self.on_join_clicked)
@@ -284,22 +375,24 @@ class StreamerAppWindow(Gtk.ApplicationWindow):
 
     # ------------------------------------------------------------------ PAGE 2
     def build_page2(self):
-        box2 = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
-        box2.set_margin_top(24)
-        box2.set_margin_bottom(24)
+        box2 = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+        box2.set_margin_top(20)
+        box2.set_margin_bottom(20)
         box2.set_margin_start(24)
         box2.set_margin_end(24)
+        box2.set_halign(Gtk.Align.CENTER)
 
-        header_title = Gtk.Label(label="Stream Control")
+        header_title = Gtk.Label(label="Stream Control Dashboard")
         header_title.add_css_class("title-1")
-        header_title.set_halign(Gtk.Align.START)
+        header_title.set_halign(Gtk.Align.CENTER)
         box2.append(header_title)
 
         # Telemetry Card Container
-        grid_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        grid_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         grid_card.add_css_class("card-box")
+        grid_card.set_size_request(380, -1)
 
-        self.val_status = self.add_grid_row(grid_card, "Status", "N/A")
+        self.val_status = self.add_grid_row(grid_card, "Status", "Idle")
         self.val_source = self.add_grid_row(grid_card, "Source", "N/A")
         self.val_fps = self.add_grid_row(grid_card, "Framerate", "N/A")
         self.val_res = self.add_grid_row(grid_card, "Resolution", "N/A")
@@ -310,9 +403,10 @@ class StreamerAppWindow(Gtk.ApplicationWindow):
 
         # Actions section
         actions_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-        actions_box.set_margin_top(12)
+        actions_box.set_halign(Gtk.Align.CENTER)
+        actions_box.set_margin_top(8)
 
-        self.change_stream_btn = Gtk.Button(label="Change Stream")
+        self.change_stream_btn = Gtk.Button(label="Change Settings")
         self.change_stream_btn.connect("clicked", self.on_change_stream_clicked)
         actions_box.append(self.change_stream_btn)
 
@@ -349,8 +443,6 @@ class StreamerAppWindow(Gtk.ApplicationWindow):
         modal.present()
 
     def on_change_stream_clicked(self, btn):
-        if self.is_streaming:
-            self.parar_transmissao()
         self.open_recording_modal()
 
     def on_setup_confirmed(self, config):
@@ -358,38 +450,47 @@ class StreamerAppWindow(Gtk.ApplicationWindow):
         self.iniciar_transmissao(config)
 
     def iniciar_transmissao(self, config):
-        token_input = self.target_url_or_token
-        if not token_input:
+        token_raw = self.target_url_or_token
+        if not token_raw:
             self.val_status.set_text("No token provided")
             return
 
-        server_url = "http://localhost:3001"
-        token = token_input
-        if "t=" in token_input:
-            parsed = urllib.parse.urlparse(token_input)
-            server_url = f"{parsed.scheme}://{parsed.netloc}"
-            token = urllib.parse.parse_qs(parsed.query).get("t", [token_input])[0]
+        token = extrair_token_da_url(token_raw)
+        self.active_room_token = token
+
+        # Interrompe capturas anteriores se já estavam ativas (Hot-Swap de Configuração)
+        if self.processo_captura:
+            try: self.processo_captura.terminate()
+            except Exception: pass
+            self.processo_captura = None
+
+        if self.processo_captura_audio:
+            try: self.processo_captura_audio.terminate()
+            except Exception: pass
+            self.processo_captura_audio = None
 
         audio_src = config.get("audio_source", "system").upper()
+        profile_name = config.get("profile", "cinema").lower()
+        res_text = "720p" if profile_name == "mobile" else ("480p" if profile_name == "fast" else "1080p")
+
         self.val_status.set_text("Connecting...")
         self.val_source.set_text(config.get("source_name") or "Selected Window")
         self.val_fps.set_text(f"{config.get('fps', 30)} FPS")
         self.val_audio.set_text(audio_src if audio_src != "NONE" else "Disabled")
-        self.val_res.set_text("1080p")
+        self.val_res.set_text(res_text)
         self.val_lag.set_text("Calculating...")
-
         self.stop_btn.set_sensitive(True)
         self.is_streaming = True
 
-        def run_loop():
+        def run_capture_worker():
             async def run_async():
                 cap_res = await iniciar_processo_captura(
                     pipewire_node=config.get("pipewire_node"),
                     pipewire_fd=config.get("pipewire_fd"),
                     fps=config.get("fps", 60),
-                    bitrate="12000k",
+                    bitrate="12000k" if profile_name == "cinema" else "4000k",
                     window_id=config.get("window_id"),
-                    profile="cinema"
+                    profile=profile_name
                 )
                 if isinstance(cap_res, tuple) and len(cap_res) >= 2:
                     cp, out_stream = cap_res[0], cap_res[1]
@@ -412,75 +513,60 @@ class StreamerAppWindow(Gtk.ApplicationWindow):
                     except Exception as ea:
                         sys.stderr.write(f"\n[Audio] Error starting audio capture: {ea}\n")
 
-                from ws_server import iniciar_servidor_ws, streamer_video_loop, streamer_audio_loop
-                from cloudflared_tunnel import iniciar_tunel_cloudflared
-                from supabase_client import atualizar_url_tunel_supabase
+                self.video_task = asyncio.create_task(ws_server.streamer_video_loop(out_stream))
+                self.audio_task = asyncio.create_task(ws_server.streamer_audio_loop(audio_proc.stdout)) if (audio_proc and audio_proc.stdout) else None
 
-                ws_runner, porta_real = await iniciar_servidor_ws(3001)
-                video_task = asyncio.create_task(streamer_video_loop(out_stream))
-                audio_task = asyncio.create_task(streamer_audio_loop(audio_proc.stdout)) if (audio_proc and audio_proc.stdout) else None
+                tunnel_public_url = self.persistent_tunnel_url or "ws://127.0.0.1:3001/ws"
 
-                cf_proc, cf_url = iniciar_tunel_cloudflared(porta_real)
-                tunnel_public_url = cf_url if cf_url else f"ws://127.0.0.1:{porta_real}/ws"
-
-                GLib.idle_add(lambda: self.val_status.set_text("Live"))
+                GLib.idle_add(lambda: self.val_status.set_text("Live 🟢"))
                 GLib.idle_add(lambda: self.val_lag.set_text("< 40ms"))
+
+                # Notifica novos parâmetros para clientes WebSocket já conectados
+                await ws_server.atualizar_config_e_notificar(
+                    new_video_cfg={"codedWidth": 1280 if profile_name == "mobile" else 1920, "codedHeight": 720 if profile_name == "mobile" else 1080, "fps": config.get("fps", 30)}
+                )
+
                 atualizar_url_tunel_supabase(token, tunnel_public_url, status="live")
 
-                try:
-                    while True:
-                        await asyncio.sleep(1)
-                finally:
-                    video_task.cancel()
-                    if audio_task:
-                        audio_task.cancel()
-                    await ws_runner.cleanup()
-                    if audio_proc:
-                        try: audio_proc.terminate()
-                        except Exception: pass
-                    if cf_proc:
-                        try: cf_proc.terminate()
-                        except Exception: pass
+            if self.persistent_loop and self.persistent_loop.is_running():
+                asyncio.run_coroutine_threadsafe(run_async(), self.persistent_loop)
 
-
-
-
-
-            try:
-                asyncio.run(run_async())
-            except Exception as e:
-                err_text = str(e)
-                GLib.idle_add(lambda err=err_text: self.val_status.set_text(f"Error: {err}"))
-
-
-        threading.Thread(target=run_loop, daemon=True).start()
+        threading.Thread(target=run_capture_worker, daemon=True).start()
 
     def on_stop_clicked(self, btn):
         self.parar_transmissao()
 
     def parar_transmissao(self):
         if self.processo_captura:
-            try:
-                self.processo_captura.terminate()
-            except Exception:
-                pass
+            try: self.processo_captura.terminate()
+            except Exception: pass
             self.processo_captura = None
 
-        if getattr(self, "processo_captura_audio", None):
+        if self.processo_captura_audio:
+            try: self.processo_captura_audio.terminate()
+            except Exception: pass
+            self.processo_captura_audio = None
+
+        token_raw = self.target_url_or_token
+        if token_raw:
+            token = extrair_token_da_url(token_raw)
+            tunnel_url = self.persistent_tunnel_url or "ws://127.0.0.1:3001/ws"
             try:
-                self.processo_captura_audio.terminate()
+                atualizar_url_tunel_supabase(token, tunnel_url, status="offline")
             except Exception:
                 pass
-            self.processo_captura_audio = None
 
         self.is_streaming = False
         self.val_status.set_text("Stopped")
         self.val_lag.set_text("N/A")
         self.stop_btn.set_sensitive(False)
 
+        # Volta para a Página 1 (Página Inicial) ao parar a transmissão
+        self.stack.set_visible_child_name("page1")
+
 
 def iniciar_gui_gtk4(token=None):
-    app = Gtk.Application(application_id="com.discord.screen.streamer")
+    app = Gtk.Application(application_id="com.streamroom.streamer")
     def on_activate(app):
         win = StreamerAppWindow(app, initial_token=token)
         win.present()
