@@ -58,7 +58,7 @@ export function gravarEnv(novos) {
   const v = { ...lerEnv(), ...novos };
 
   const linhas = [
-    '# Configuração da Sala de Tela.',
+    '# Configuração do StreamRoom.',
     '# Criado por "npm run configurar" — rode de novo para mudar qualquer coisa.',
     '# Este arquivo tem senhas: não mande para ninguém nem publique no GitHub.',
     '',
@@ -100,7 +100,7 @@ export function gravarEnv(novos) {
     '# Túnel com endereço fixo via Cloudflare.',
     `TUNEL_CONFIG=${v.TUNEL_CONFIG ?? ''}`,
     '',
-    '# Subdomínio Fixo Gratuito (ex: discord-screen-seu-nome).',
+    '# Subdomínio Fixo Gratuito (ex: streamroom-seu-nome).',
     '# Mantém o endereço fixo para você não precisar trocar o Target no Discord nunca mais!',
     `FIXED_SUBDOMAIN=${v.FIXED_SUBDOMAIN ?? ''}`,
     '',

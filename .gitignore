@@ -6,3 +6,5 @@ dist/
 .cache/
 site/
 coverage/
+__pycache__/
+*.pyc

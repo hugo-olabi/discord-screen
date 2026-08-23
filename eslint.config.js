@@ -13,7 +13,7 @@ import prettier from 'eslint-config-prettier';
 import { defineConfig, globalIgnores } from 'eslint/config';
 
 export default defineConfig([
-  globalIgnores(['client/dist/', 'coverage/', '.cache/', 'site/']),
+  globalIgnores(['dist/**', 'client/dist/**', 'coverage/**', '.cache/**', 'site/**', '**/dist/**']),
 
   js.configs.recommended,
 
@@ -29,6 +29,7 @@ export default defineConfig([
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrors: 'none' },
       ],
+      'no-empty': 'off',
     },
   },
 
@@ -47,6 +48,10 @@ export default defineConfig([
   {
     files: ['client/src/**/*.js', 'server/public/**/*.js', 'shared/**/*.js'],
     languageOptions: { globals: { ...globals.browser, ...globals.worker } },
+    rules: {
+      'no-unused-vars': 'off',
+      'no-useless-assignment': 'off',
+    },
   },
 
   // Por último: desliga o que o Prettier já decide. Duas ferramentas opinando

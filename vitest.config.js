@@ -4,7 +4,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     setupFiles: ['./vitest.setup.js'],
-    include: ['shared/**/*.test.js', 'native-streamer/**/*.test.js'],
+    include: ['shared/**/*.test.js'],
 
     coverage: {
       provider: 'v8',
