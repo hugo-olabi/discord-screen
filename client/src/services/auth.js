@@ -12,14 +12,31 @@ export function generateShortToken(length = 6) {
 }
 
 export async function loginWithDiscord() {
-  const { data, error } = await supabase.auth.signInWithOAuth({
-    provider: 'discord',
-    options: {
-      redirectTo: window.location.origin,
-    },
-  });
-  if (error) throw error;
-  return data;
+  try {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'discord',
+      options: {
+        redirectTo: window.location.origin,
+      },
+    });
+
+    if (error) {
+      if (error.message?.includes('provider is not enabled') || error.status === 400) {
+        throw new Error(
+          'Discord OAuth provider is not enabled in your Supabase Dashboard. Go to Supabase -> Authentication -> Providers -> Discord to enable it, or edit your display name in Profile.'
+        );
+      }
+      throw error;
+    }
+    return data;
+  } catch (err) {
+    if (err.message?.includes('validation_failed') || err.message?.includes('provider is not enabled')) {
+      throw new Error(
+        'Discord OAuth provider is not enabled in Supabase. Enable Discord in Supabase Dashboard -> Authentication -> Providers, or set your display name in Profile.'
+      );
+    }
+    throw err;
+  }
 }
 
 export async function logoutDiscord() {
