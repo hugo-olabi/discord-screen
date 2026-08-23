@@ -46,16 +46,15 @@ class ChainedProcess:
 def obter_perfil_qualidade(profile: str = "cinema", custom_fps: int | None = None, custom_bitrate: str | None = None) -> tuple[int, str, str, str]:
     profiles = {
         "cinema": (60, "12000k", "16000k", "24000k"),
-        "balanced": (30, "6000k", "8000k", "12000k"),
-        "fast": (30, "2500k", "3500k", "5000k"),
+        "balanced": (30, "8000k", "10000k", "16000k"),
+        "fast": (30, "4000k", "6000k", "8000k"),
     }
     fps, bitrate, maxrate, bufsize = profiles.get(profile.lower(), profiles["cinema"])
     if custom_fps:
         fps = custom_fps
     if custom_bitrate:
-        bitrate = custom_bitrate,
-        # Recalcular maxrate e bufsize se bitrate customizado
-        val_k = int(custom_bitrate.replace("k", "")) if "k" in custom_bitrate else 2500
+        bitrate = custom_bitrate
+        val_k = int(custom_bitrate.replace("k", "")) if "k" in custom_bitrate else 4000
         maxrate = f"{int(val_k * 1.3)}k"
         bufsize = f"{int(val_k * 2.0)}k"
 
@@ -96,7 +95,7 @@ async def iniciar_processo_captura(pipewire_node: str | None = None, pipewire_fd
         cp = ChainedProcess(proc)
         return cp, proc.stdout, proc.stderr
 
-    bitrate_bps = str(int(bitrate.replace("k", "")) * 1000) if "k" in bitrate else "2500000"
+    bitrate_bps = str(int(bitrate.replace("k", "")) * 1000) if "k" in bitrate else "12000000"
     keyframe_dist = str(min(fps, 30))
 
     ivf_muxer = "avmux_ivf" if tem_gstreamer_element("avmux_ivf") else ("ivfenc" if tem_gstreamer_element("ivfenc") else None)
@@ -109,9 +108,21 @@ async def iniciar_processo_captura(pipewire_node: str | None = None, pipewire_fd
         pw_src_args.append(f"path={pipewire_node}")
         pw_src_args.extend(["always-copy=true", "do-timestamp=true"])
 
+        encoder_elem = "vp9enc" if tem_gstreamer_element("vp9enc") else "vp8enc"
+        encoder_args = [
+            encoder_elem,
+            "deadline=1",
+            "cpu-used=8" if encoder_elem == "vp9enc" else "cpu-used=6",
+            f"target-bitrate={bitrate_bps}",
+            f"keyframe-max-dist={keyframe_dist}",
+            "end-usage=cq",
+            "cq-level=26",
+            "threads=8"
+        ]
+
         gst_cmd = ["gst-launch-1.0", "-q", "-e", "pipewiresrc"] + pw_src_args + [
-            "!", "videoconvert", "!", "video/x-raw,format=I420",
-            "!", "vp8enc", "deadline=1", "cpu-used=6", f"target-bitrate={bitrate_bps}", f"keyframe-max-dist={keyframe_dist}",
+            "!", "videoconvert", "!"
+        ] + encoder_args + [
             "!", ivf_muxer, "!", "fdsink", "sync=false", "fd=1"
         ]
         proc = await asyncio.create_subprocess_exec(
@@ -191,16 +202,29 @@ async def iniciar_processo_captura_audio(source_name: str | None = None, is_scre
     return proc
 
 def montar_comando_pipewire_gstreamer(pipewire_node: str, pipewire_fd: int | None = None, fps: int = 30, bitrate: str = "2500k") -> tuple[list[str] | str, bool]:
-    bitrate_bps = str(int(bitrate.replace("k", "")) * 1000) if "k" in bitrate else "2500000"
+    bitrate_bps = str(int(bitrate.replace("k", "")) * 1000) if "k" in bitrate else "12000000"
     keyframe_dist = str(min(fps, 30))
     pw_src_args = []
     if pipewire_fd is not None:
         pw_src_args.append(f"fd={pipewire_fd}")
     pw_src_args.append(f"path={pipewire_node}")
     pw_src_args.extend(["always-copy=true", "do-timestamp=true"])
+
+    encoder_elem = "vp9enc" if tem_gstreamer_element("vp9enc") else "vp8enc"
+    encoder_args = [
+        encoder_elem,
+        "deadline=1",
+        "cpu-used=8" if encoder_elem == "vp9enc" else "cpu-used=6",
+        f"target-bitrate={bitrate_bps}",
+        f"keyframe-max-dist={keyframe_dist}",
+        "end-usage=cq",
+        "cq-level=26",
+        "threads=8"
+    ]
+
     cmd = ["gst-launch-1.0", "-q", "-e", "pipewiresrc"] + pw_src_args + [
-        "!", "videoconvert", "!", "video/x-raw,format=I420",
-        "!", "vp8enc", "deadline=1", "cpu-used=6", f"target-bitrate={bitrate_bps}", f"keyframe-max-dist={keyframe_dist}",
+        "!", "videoconvert", "!"
+    ] + encoder_args + [
         "!", "webmmux", "streamable=true", "!", "fdsink", "sync=false"
     ]
     return cmd, False
@@ -237,25 +261,31 @@ def montar_comando_ffmpeg(fps: int = 30, bitrate: str = "2500k", window_id: str 
     else:
         cmd.extend(["-f", "x11grab", "-framerate", str(fps), "-i", ":0.0"])
 
-
+    # Filtro de downscaling para max 1080p + deduplicacao de quadros estaticos (mpdecimate)
+    cmd.extend(["-vf", "scale='min(1920,iw)':-2:flags=lanczos,mpdecimate"])
 
     # Selecionar o melhor codec suportado para o container IVF (VP9 > VP8)
     if tem_ffmpeg_encoder("libvpx-vp9"):
         encoder = "libvpx-vp9"
         codec_flags = [
             "-c:v", encoder,
+            "-crf", "26",
             "-b:v", bitrate,
             "-maxrate", maxrate,
             "-bufsize", bufsize,
             "-g", keyframe_interval,
             "-keyint_min", keyframe_interval,
             "-deadline", "realtime",
-            "-cpu-used", "8",
+            "-cpu-used", "6",
+            "-tile-columns", "2",
+            "-frame-parallel", "1",
+            "-row-mt", "1",
         ]
     else:
         encoder = "libvpx"
         codec_flags = [
             "-c:v", encoder,
+            "-crf", "22",
             "-b:v", bitrate,
             "-maxrate", maxrate,
             "-bufsize", bufsize,

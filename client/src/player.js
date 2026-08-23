@@ -76,8 +76,9 @@ export function createPlayer(canvas, { onError, onTamanho } = {}) {
     // Decoder frio só aceita keyframe; deltas antes disso viram erro.
     if (needKeyframe && !isKeyframe) return;
 
-    // Backpressure: se o decoder acumulou quadros na fila, descartar deltas para voltar ao vivo
+    // Backpressure: se o decoder acumulou quadros na fila, descartar deltas e exigir novo keyframe
     if (!isKeyframe && decoder.decodeQueueSize > 2) {
+      needKeyframe = true;
       return;
     }
 
