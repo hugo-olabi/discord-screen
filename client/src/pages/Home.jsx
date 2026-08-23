@@ -1,6 +1,6 @@
 import { createSignal, onMount, onCleanup, Show } from 'solid-js';
 import Topbar from '../components/Topbar.jsx';
-import Lobby from '../components/Lobby.jsx';
+import TokenLanding from '../components/TokenLanding.jsx';
 import StreamStage from '../components/StreamStage.jsx';
 import Bottombar from '../components/Bottombar.jsx';
 import Toast from '../components/Toast.jsx';
@@ -11,12 +11,12 @@ import RoomSettingsModal from '../components/modals/RoomSettingsModal.jsx';
 import NativeStreamerModal from '../components/modals/NativeStreamerModal.jsx';
 import ProfileModal from '../components/modals/ProfileModal.jsx';
 
-import { supabase } from '../services/supabase.js';
+import { supabase, fetchRoomByToken, createRoomRecord, cleanupInactiveRooms } from '../services/supabase.js';
 import { createBroadcaster } from '../services/broadcaster.js';
+import { getCurrentUser, loginWithDiscord, logoutDiscord, generateShortToken } from '../services/auth.js';
 
 export default function Home() {
-  const [user, setUser] = createSignal({ id: crypto.randomUUID(), name: 'Guest' });
-  const [rooms, setRooms] = createSignal([]);
+  const [user, setUser] = createSignal({ id: crypto.randomUUID(), name: 'Guest User' });
   const [activeRoom, setActiveRoom] = createSignal(null);
   const [streams, setStreams] = createSignal([]);
   const [participantsCount, setParticipantsCount] = createSignal(0);
@@ -35,11 +35,12 @@ export default function Home() {
   const [showNativeModal, setShowNativeModal] = createSignal(false);
   const [showProfileModal, setShowProfileModal] = createSignal(false);
 
-  const [selectedRoom, setSelectedRoom] = createSignal(null);
+  const [pendingRoom, setPendingRoom] = createSignal(null);
   const [joinError, setJoinError] = createSignal('');
 
   let broadcaster = null;
   let activeRealtimeChannel = null;
+  let cleanupInterval = null;
 
   function showToast(msg, isErr = false) {
     setToastMessage(msg);
@@ -50,11 +51,9 @@ export default function Home() {
   }
 
   onMount(async () => {
-    // Load local profile preference
-    const savedName = localStorage.getItem('streamroom_user_name');
-    if (savedName) {
-      setUser((u) => ({ ...u, name: savedName }));
-    }
+    // Authenticate / fetch user details
+    const currentUser = await getCurrentUser();
+    if (currentUser) setUser(currentUser);
 
     // Initialize broadcaster engine
     broadcaster = await createBroadcaster({
@@ -66,70 +65,36 @@ export default function Home() {
       },
     });
 
-    // Load initial room list from Supabase
-    fetchRooms();
+    // Check URL parameters for ?token=XYZ123
+    const urlParams = new URLSearchParams(window.location.search);
+    const tokenParam = urlParams.get('token') || urlParams.get('t') || urlParams.get('room');
+    if (tokenParam) {
+      handleJoinToken(tokenParam);
+    }
 
-    // Subscribe to rooms changes in Supabase Realtime
-    activeRealtimeChannel = supabase
-      .channel('public:rooms')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms' }, () => {
-        fetchRooms();
-      })
-      .subscribe();
+    // Run background cleanup for empty rooms every 2 minutes
+    cleanupInactiveRooms();
+    cleanupInterval = setInterval(cleanupInactiveRooms, 120000);
   });
 
   onCleanup(() => {
     if (broadcaster) broadcaster.stop();
     if (activeRealtimeChannel) supabase.removeChannel(activeRealtimeChannel);
+    if (cleanupInterval) clearInterval(cleanupInterval);
   });
 
-  async function fetchRooms() {
-    try {
-      const { data, error } = await supabase.from('rooms').select('*').order('created_at', { ascending: false });
-      if (!error && data) {
-        setRooms(
-          data.map((r) => ({
-            id: r.id,
-            name: r.name || 'StreamRoom',
-            owner: r.streamer_id ? 'Host' : 'Public Host',
-            locked: Boolean(r.password),
-          }))
-        );
-      }
-    } catch {
-      /* ignore fetching errors */
+  async function handleJoinToken(tokenInput) {
+    if (!tokenInput) return;
+    const cleanToken = tokenInput.trim();
+
+    const room = await fetchRoomByToken(cleanToken);
+    if (!room) {
+      showToast(`Stream token "${cleanToken}" not found or inactive.`, true);
+      return;
     }
-  }
 
-  async function handleCreateRoom({ name, password }) {
-    const roomId = crypto.randomUUID();
-    const roomName = name || 'StreamRoom';
-
-    try {
-      const { error } = await supabase.from('rooms').insert({
-        id: roomId,
-        name: roomName,
-        password: password || null,
-        status: 'live',
-        updated_at: new Date().toISOString(),
-      });
-
-      if (error) {
-        showToast('Failed to create room in database', true);
-        return;
-      }
-
-      setShowCreateModal(false);
-      enterRoom({ id: roomId, name: roomName, locked: Boolean(password) });
-      showToast(`Room "${roomName}" created!`);
-    } catch (err) {
-      showToast(`Failed to create room: ${err.message}`, true);
-    }
-  }
-
-  function handleJoinRoom(room) {
     if (room.locked) {
-      setSelectedRoom(room);
+      setPendingRoom(room);
       setJoinError('');
       setShowJoinModal(true);
     } else {
@@ -137,10 +102,52 @@ export default function Home() {
     }
   }
 
+  async function handleCreateRoom({ name, password }) {
+    const shortToken = generateShortToken(6);
+    const streamName = name || `Stream ${shortToken}`;
+
+    try {
+      await createRoomRecord({
+        token: shortToken,
+        name: streamName,
+        password: password || null,
+        streamerName: user().name,
+        streamerId: user().id,
+      });
+
+      setShowCreateModal(false);
+      enterRoom({
+        id: shortToken,
+        token: shortToken,
+        name: streamName,
+        locked: Boolean(password),
+      });
+
+      showToast(`Stream created! Token: ${shortToken}`);
+    } catch (err) {
+      showToast(`Failed to create stream: ${err.message}`, true);
+    }
+  }
+
   function enterRoom(room) {
     setActiveRoom(room);
     setParticipantsCount(1);
-    fetchRooms();
+
+    // Update URL query string without reloading page
+    const newUrl = `${window.location.origin}${window.location.pathname}?token=${room.token || room.id}`;
+    window.history.replaceState({ path: newUrl }, '', newUrl);
+
+    // Subscribe to realtime changes for this room
+    if (activeRealtimeChannel) supabase.removeChannel(activeRealtimeChannel);
+    activeRealtimeChannel = supabase
+      .channel(`public:rooms:${room.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms', filter: `id=eq.${room.id}` }, (payload) => {
+        if (payload.eventType === 'DELETE') {
+          handleLeaveRoom();
+          showToast('Stream closed by host');
+        }
+      })
+      .subscribe();
   }
 
   function handleLeaveRoom() {
@@ -150,12 +157,31 @@ export default function Home() {
     setActiveRoom(null);
     setStreams([]);
     setParticipantsCount(0);
-    showToast('Left room');
+
+    // Clear token parameter from URL
+    const cleanUrl = `${window.location.origin}${window.location.pathname}`;
+    window.history.replaceState({ path: cleanUrl }, '', cleanUrl);
+
+    showToast('Left stream');
+  }
+
+  async function handleDiscordLogin() {
+    try {
+      await loginWithDiscord();
+    } catch (err) {
+      showToast(`Discord login failed: ${err.message}`, true);
+    }
+  }
+
+  async function handleDiscordLogout() {
+    await logoutDiscord();
+    setUser({ id: crypto.randomUUID(), name: 'Guest User', avatar: null, isDiscord: false });
+    showToast('Signed out');
   }
 
   async function toggleScreenShare() {
     if (!activeRoom()) {
-      showToast('Please join or create a room first to broadcast', true);
+      showToast('Join or create a stream first to broadcast', true);
       return;
     }
     if (isSharing()) {
@@ -172,7 +198,7 @@ export default function Home() {
 
   async function toggleCamera() {
     if (!activeRoom()) {
-      showToast('Please join or create a room first to broadcast', true);
+      showToast('Join or create a stream first to broadcast', true);
       return;
     }
     if (isCamera()) {
@@ -226,10 +252,12 @@ export default function Home() {
       <Show
         when={activeRoom()}
         fallback={
-          <Lobby
-            rooms={rooms}
+          <TokenLanding
+            user={user}
+            onJoinToken={handleJoinToken}
             onOpenCreate={() => setShowCreateModal(true)}
-            onJoinRoom={handleJoinRoom}
+            onDiscordLogin={handleDiscordLogin}
+            onDiscordLogout={handleDiscordLogout}
           />
         }
       >
@@ -268,7 +296,11 @@ export default function Home() {
         error={joinError}
         onClose={() => setShowJoinModal(false)}
         onJoin={(pass) => {
-          enterRoom(selectedRoom());
+          if (pendingRoom()?.password && pendingRoom().password !== pass) {
+            setJoinError('Incorrect password');
+            return;
+          }
+          enterRoom(pendingRoom());
           setShowJoinModal(false);
         }}
       />
@@ -278,13 +310,13 @@ export default function Home() {
         onClose={() => setShowSettingsModal(false)}
         onSave={() => {
           setShowSettingsModal(false);
-          showToast('Room settings updated');
+          showToast('Stream settings updated');
         }}
       />
 
       <NativeStreamerModal
         isOpen={showNativeModal}
-        token={() => activeRoom()?.id || 'room-token-sample'}
+        token={() => activeRoom()?.token || activeRoom()?.id || 'token-sample'}
         onClose={() => setShowNativeModal(false)}
         onToast={(msg) => showToast(msg)}
       />
