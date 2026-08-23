@@ -11,13 +11,14 @@ try:
 except ImportError:
     pass
 
-# Manter referência global para a sessão DBus não ser fechada pela coleta de lixo
+# Retain global reference for DBus session to prevent garbage collection closure
 _ACTIVE_PORTAL_SESSION = None
 
 def _get_random_token() -> str:
     return 'ds_' + ''.join(random.choices(string.ascii_letters + string.digits, k=10))
 
-def fechar_sessao_portal_ativa():
+def close_active_portal_session():
+    """Closes the currently active Portal DBus session and file descriptors."""
     global _ACTIVE_PORTAL_SESSION
     if _ACTIVE_PORTAL_SESSION:
         try:
@@ -33,34 +34,21 @@ def fechar_sessao_portal_ativa():
             pass
         _ACTIVE_PORTAL_SESSION = None
 
-def obter_pipewire_fd_e_node(timeout_seconds: int = 60) -> tuple[str | None, int | None, bool]:
+def get_pipewire_fd_and_node(timeout_seconds: int = 60) -> tuple[str | None, int | None, bool]:
     """
-    Solicita captura de tela/janela via XDG Desktop Portal (org.freedesktop.portal.ScreenCast)
-    ou reaproveita a sessão ativa do Portal Daemon se estiver rodando em segundo plano.
-    Retorna (node_id, pipewire_fd, is_screen).
+    Requests screen or window capture via XDG Desktop Portal (org.freedesktop.portal.ScreenCast).
+    Returns (node_id, pipewire_fd, is_screen).
     """
     is_screen = True
-    # 1. Tentar reaproveitar a sessão ativa do Portal Daemon se estiver rodando
-    try:
-        from portal_daemon import obter_sessao_do_daemon
-        d_res = obter_sessao_do_daemon()
-        if isinstance(d_res, tuple) and len(d_res) >= 2 and d_res[0]:
-            d_node, d_fd = d_res[0], d_res[1]
-            sys.stderr.write(f"⚡ Reaproveitando sessão do Portal Daemon: Node #{d_node} (FD #{d_fd})\n")
-            return d_node, d_fd, True
 
-    except Exception:
-        pass
-
-    # 2. Caso contrário, criar nova sessão do Portal via DBus
     global _ACTIVE_PORTAL_SESSION
-    fechar_sessao_portal_ativa()
+    close_active_portal_session()
 
     try:
         bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
     except Exception as e:
-        sys.stderr.write(f"Erro ao conectar ao DBus: {e}\n")
-        return None, None
+        sys.stderr.write(f"DBus connection error: {e}\n")
+        return None, None, True
 
     try:
         screencast_proxy = Gio.DBusProxy.new_sync(
@@ -73,8 +61,8 @@ def obter_pipewire_fd_e_node(timeout_seconds: int = 60) -> tuple[str | None, int
             None
         )
     except Exception as e:
-        sys.stderr.write(f"Erro ao criar proxy do ScreenCast Portal: {e}\n")
-        return None, None
+        sys.stderr.write(f"ScreenCast Portal proxy creation error: {e}\n")
+        return None, None, True
 
     loop = GLib.MainLoop()
     session_handle = None
@@ -82,7 +70,7 @@ def obter_pipewire_fd_e_node(timeout_seconds: int = 60) -> tuple[str | None, int
     step = 'create_session'
 
     def on_portal_response(connection, sender_name, object_path, interface_name, signal_name, parameters, user_data):
-        nonlocal session_handle, node_id, step
+        nonlocal session_handle, node_id, step, is_screen
         if signal_name != 'Response':
             return
 
@@ -111,7 +99,7 @@ def obter_pipewire_fd_e_node(timeout_seconds: int = 60) -> tuple[str | None, int
                             is_screen = (st == 1)
                 loop.quit()
         except Exception as err:
-            sys.stderr.write(f"Erro ao processar resposta do Portal: {err}\n")
+            sys.stderr.write(f"Error processing Portal response: {err}\n")
             loop.quit()
 
     bus.signal_subscribe(
@@ -136,7 +124,7 @@ def obter_pipewire_fd_e_node(timeout_seconds: int = 60) -> tuple[str | None, int
                 None
             )
         except Exception as e:
-            sys.stderr.write(f"Erro no CreateSession: {e}\n")
+            sys.stderr.write(f"CreateSession error: {e}\n")
             loop.quit()
 
     def do_select_sources():
@@ -158,7 +146,7 @@ def obter_pipewire_fd_e_node(timeout_seconds: int = 60) -> tuple[str | None, int
                 None
             )
         except Exception as e:
-            sys.stderr.write(f"Erro no SelectSources: {e}\n")
+            sys.stderr.write(f"SelectSources error: {e}\n")
             loop.quit()
 
     def do_start():
@@ -176,7 +164,7 @@ def obter_pipewire_fd_e_node(timeout_seconds: int = 60) -> tuple[str | None, int
                 None
             )
         except Exception as e:
-            sys.stderr.write(f"Erro no Start: {e}\n")
+            sys.stderr.write(f"Start error: {e}\n")
             loop.quit()
 
     do_create_session()
@@ -196,9 +184,9 @@ def obter_pipewire_fd_e_node(timeout_seconds: int = 60) -> tuple[str | None, int
             )
             if fd_list and fd_list.get_length() > 0:
                 raw_fd = fd_list.get(0)
-                pw_fd = os.dup(raw_fd) # Duplicar para sobreviver à destruição de fd_list pelo GC!
+                pw_fd = os.dup(raw_fd)
         except Exception as e:
-            sys.stderr.write(f"Aviso ao obter OpenPipeWireRemote: {e}\n")
+            sys.stderr.write(f"Warning fetching OpenPipeWireRemote: {e}\n")
 
         _ACTIVE_PORTAL_SESSION = {
             'bus': bus,
@@ -211,17 +199,21 @@ def obter_pipewire_fd_e_node(timeout_seconds: int = 60) -> tuple[str | None, int
 
     return node_id, pw_fd, is_screen
 
-def solicitar_xdg_screencast(timeout_seconds: int = 60) -> str | None:
-    res = obter_pipewire_fd_e_node(timeout_seconds)
+def request_xdg_screencast(timeout_seconds: int = 60) -> str | None:
+    res = get_pipewire_fd_and_node(timeout_seconds)
     if isinstance(res, tuple) and len(res) >= 2:
         return res[0]
     return None
 
+# Backward compatibility aliases
+fechar_sessao_portal_ativa = close_active_portal_session
+obter_pipewire_fd_e_node = get_pipewire_fd_and_node
+solicitar_xdg_screencast = request_xdg_screencast
+
 if __name__ == '__main__':
-    res = obter_pipewire_fd_e_node()
+    res = get_pipewire_fd_and_node()
     if isinstance(res, tuple) and len(res) >= 2 and res[0]:
         print(f"PIPEWIRE_NODE={res[0]} FD={res[1]}")
         sys.exit(0)
     else:
         sys.exit(1)
-

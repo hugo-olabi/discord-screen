@@ -3,7 +3,7 @@ import os
 import subprocess
 import sys
 
-def tem_gstreamer_element(element_name: str) -> bool:
+def has_gstreamer_element(element_name: str) -> bool:
     try:
         res = subprocess.run(["gst-inspect-1.0", element_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return res.returncode == 0
@@ -43,7 +43,7 @@ class ChainedProcess:
 
         return "\n".join(logs)
 
-def obter_perfil_qualidade(profile: str = "cinema", custom_fps: int | None = None, custom_bitrate: str | None = None) -> tuple[int, str, str, str]:
+def get_quality_profile(profile: str = "cinema", custom_fps: int | None = None, custom_bitrate: str | None = None) -> tuple[int, str, str, str]:
     profiles = {
         "cinema": (60, "12000k", "16000k", "24000k"),
         "balanced": (30, "8000k", "10000k", "16000k"),
@@ -63,14 +63,14 @@ def obter_perfil_qualidade(profile: str = "cinema", custom_fps: int | None = Non
         bitrate = bitrate[0]
     return fps, bitrate, maxrate, bufsize
 
-def tem_ffmpeg_encoder(encoder_name: str) -> bool:
+def has_ffmpeg_encoder(encoder_name: str) -> bool:
     try:
         res = subprocess.run(["ffmpeg", "-encoders"], capture_output=True, text=True, timeout=2)
         return encoder_name in res.stdout
     except Exception:
         return False
 
-def montar_comando_white_noise(fps: int = 30, bitrate: str = "2500k") -> tuple[list[str], bool]:
+def build_white_noise_command(fps: int = 30, bitrate: str = "2500k") -> tuple[list[str], bool]:
     keyframe_interval = str(min(fps, 30))
     cmd = [
         "ffmpeg", "-loglevel", "warning",
@@ -87,9 +87,9 @@ def montar_comando_white_noise(fps: int = 30, bitrate: str = "2500k") -> tuple[l
     ]
     return cmd, False
 
-async def iniciar_processo_captura(pipewire_node: str | None = None, pipewire_fd: int | None = None, fps: int = 30, bitrate: str = "2500k", window_id: str | None = None, use_noise: bool = False, profile: str = "cinema"):
+async def start_capture_process(pipewire_node: str | None = None, pipewire_fd: int | None = None, fps: int = 30, bitrate: str = "2500k", window_id: str | None = None, use_noise: bool = False, profile: str = "cinema"):
     if use_noise:
-        cmd, _ = montar_comando_white_noise(fps=fps, bitrate=bitrate)
+        cmd, _ = build_white_noise_command(fps=fps, bitrate=bitrate)
         proc = await asyncio.create_subprocess_exec(
             *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
         )
@@ -99,7 +99,7 @@ async def iniciar_processo_captura(pipewire_node: str | None = None, pipewire_fd
     bitrate_bps = str(int(bitrate.replace("k", "")) * 1000) if "k" in bitrate else "12000000"
     keyframe_dist = str(max(15, fps // 2))
 
-    ivf_muxer = "avmux_ivf" if tem_gstreamer_element("avmux_ivf") else ("ivfenc" if tem_gstreamer_element("ivfenc") else None)
+    ivf_muxer = "avmux_ivf" if has_gstreamer_element("avmux_ivf") else ("ivfenc" if has_gstreamer_element("ivfenc") else None)
 
     if pipewire_node and ivf_muxer:
         pass_fds = (pipewire_fd,) if pipewire_fd is not None else ()
@@ -109,7 +109,7 @@ async def iniciar_processo_captura(pipewire_node: str | None = None, pipewire_fd
         pw_src_args.append(f"path={pipewire_node}")
         pw_src_args.extend(["always-copy=true", "do-timestamp=true"])
 
-        encoder_elem = "vp9enc" if tem_gstreamer_element("vp9enc") else "vp8enc"
+        encoder_elem = "vp9enc" if has_gstreamer_element("vp9enc") else "vp8enc"
         encoder_args = [
             encoder_elem,
             "deadline=1",
@@ -134,20 +134,20 @@ async def iniciar_processo_captura(pipewire_node: str | None = None, pipewire_fd
             cp = ChainedProcess(proc)
             return cp, proc.stdout, proc.stderr
 
-    cmd, _ = montar_comando_ffmpeg(fps=fps, bitrate=bitrate, window_id=window_id, profile=profile)
+    cmd, _ = build_ffmpeg_command(fps=fps, bitrate=bitrate, window_id=window_id, profile=profile)
     proc = await asyncio.create_subprocess_exec(
         *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
     )
     cp = ChainedProcess(proc)
     return cp, proc.stdout, proc.stderr
 
-def obter_dispositivo_audio(audio_source: str = "system", source_name: str | None = None, is_screen: bool = True) -> str | None:
+def get_audio_device(audio_source: str = "system", source_name: str | None = None, is_screen: bool = True) -> str | None:
     """
     audio_source:
-      - 'system': Áudio do Sistema (Monitor principal de áudio)
-      - 'app': Áudio do Aplicativo selecionado (Monitor do Sink Input)
-      - 'mic': Microfone / Entrada de áudio
-      - 'none': Sem áudio
+      - 'system': System Audio (Main Desktop audio monitor)
+      - 'app': Selected App Audio (Sink Input Monitor)
+      - 'mic': Microphone / Audio Input
+      - 'none': Audio disabled
     """
     if audio_source == "none":
         return None
@@ -184,7 +184,7 @@ def obter_dispositivo_audio(audio_source: str = "system", source_name: str | Non
                     return f"sink-input-{current['id']}.monitor"
         except Exception: pass
 
-    # Fallback / Padrao: Sistema (Desktop Output)
+    # Default fallback: Desktop Output
     try:
         res = subprocess.run(['pactl', 'get-default-sink'], capture_output=True, text=True, timeout=2)
         ds = res.stdout.strip()
@@ -201,15 +201,15 @@ def obter_dispositivo_audio(audio_source: str = "system", source_name: str | Non
 
     return "@DEFAULT_MONITOR@"
 
-async def iniciar_processo_captura_audio(audio_source: str = "system", source_name: str | None = None, is_screen: bool = True):
+async def start_audio_capture_process(audio_source: str = "system", source_name: str | None = None, is_screen: bool = True):
     if audio_source == "none":
         return None
 
-    dev = obter_dispositivo_audio(audio_source=audio_source, source_name=source_name, is_screen=is_screen)
+    dev = get_audio_device(audio_source=audio_source, source_name=source_name, is_screen=is_screen)
     if not dev:
         return None
 
-    sys.stderr.write(f"\n[Audio] Capturando áudio ({audio_source}): {dev}\n")
+    sys.stderr.write(f"\n[Audio] Capturing audio ({audio_source}): {dev}\n")
     ff_cmd = [
         "ffmpeg", "-loglevel", "warning",
         "-f", "pulse", "-i", dev,
@@ -224,7 +224,7 @@ async def iniciar_processo_captura_audio(audio_source: str = "system", source_na
     )
     return proc
 
-def montar_comando_pipewire_gstreamer(pipewire_node: str, pipewire_fd: int | None = None, fps: int = 30, bitrate: str = "2500k") -> tuple[list[str] | str, bool]:
+def build_pipewire_gstreamer_command(pipewire_node: str, pipewire_fd: int | None = None, fps: int = 30, bitrate: str = "2500k") -> tuple[list[str] | str, bool]:
     bitrate_bps = str(int(bitrate.replace("k", "")) * 1000) if "k" in bitrate else "12000000"
     keyframe_dist = str(min(fps, 30))
     pw_src_args = []
@@ -233,7 +233,7 @@ def montar_comando_pipewire_gstreamer(pipewire_node: str, pipewire_fd: int | Non
     pw_src_args.append(f"path={pipewire_node}")
     pw_src_args.extend(["always-copy=true", "do-timestamp=true"])
 
-    encoder_elem = "vp9enc" if tem_gstreamer_element("vp9enc") else "vp8enc"
+    encoder_elem = "vp9enc" if has_gstreamer_element("vp9enc") else "vp8enc"
     encoder_args = [
         encoder_elem,
         "deadline=1",
@@ -252,11 +252,11 @@ def montar_comando_pipewire_gstreamer(pipewire_node: str, pipewire_fd: int | Non
     ]
     return cmd, False
 
-def montar_comando_ffmpeg(fps: int = 30, bitrate: str = "2500k", window_id: str | None = None, profile: str = "cinema") -> tuple[list[str] | str, bool]:
-    fps, bitrate, maxrate, bufsize = obter_perfil_qualidade(profile=profile, custom_fps=fps, custom_bitrate=bitrate)
+def build_ffmpeg_command(fps: int = 30, bitrate: str = "2500k", window_id: str | None = None, profile: str = "cinema") -> tuple[list[str] | str, bool]:
+    fps, bitrate, maxrate, bufsize = get_quality_profile(profile=profile, custom_fps=fps, custom_bitrate=bitrate)
     platform = sys.platform
     keyframe_interval = str(max(15, fps // 2))
-    
+
     cmd = [
         "ffmpeg",
         "-loglevel", "warning",
@@ -284,12 +284,10 @@ def montar_comando_ffmpeg(fps: int = 30, bitrate: str = "2500k", window_id: str 
     else:
         cmd.extend(["-f", "x11grab", "-framerate", str(fps), "-i", ":0.0"])
 
-    # Filtro de downscaling mantendo framerate constante e fluido (1280p para mobile, 1080p para pc)
     scale_w = 1280 if profile.lower() == "mobile" else 1920
     cmd.extend(["-vf", f"scale='min({scale_w},iw)':-2:flags=lanczos"])
 
-    # Selecionar o melhor codec suportado para o container IVF (VP9 > VP8)
-    if tem_ffmpeg_encoder("libvpx-vp9"):
+    if has_ffmpeg_encoder("libvpx-vp9"):
         encoder = "libvpx-vp9"
         codec_flags = [
             "-c:v", encoder,
@@ -324,3 +322,13 @@ def montar_comando_ffmpeg(fps: int = 30, bitrate: str = "2500k", window_id: str 
 
     return cmd, False
 
+# Backward compatibility aliases
+tem_gstreamer_element = has_gstreamer_element
+obter_perfil_qualidade = get_quality_profile
+tem_ffmpeg_encoder = has_ffmpeg_encoder
+montar_comando_white_noise = build_white_noise_command
+iniciar_processo_captura = start_capture_process
+obter_dispositivo_audio = get_audio_device
+iniciar_processo_captura_audio = start_audio_capture_process
+montar_comando_pipewire_gstreamer = build_pipewire_gstreamer_command
+montar_comando_ffmpeg = build_ffmpeg_command

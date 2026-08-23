@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import json
 import os
 import re
 import shutil
@@ -9,30 +10,32 @@ import urllib.request
 
 TRYCLOUDFLARE_REGEX = re.compile(r"https://[a-z0-9-]+\.trycloudflare\.com")
 
-def obter_caminho_cloudflared() -> str:
-    raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    no_cache = os.path.join(raiz, ".cache", "cloudflared")
-    if os.path.exists(no_cache) and os.access(no_cache, os.X_OK):
-        return no_cache
+def get_cloudflared_path() -> str:
+    """Finds binary path for cloudflared in local cache or system PATH."""
+    root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cache_path = os.path.join(root_dir, ".cache", "cloudflared")
+    if os.path.exists(cache_path) and os.access(cache_path, os.X_OK):
+        return cache_path
 
-    no_path = shutil.which("cloudflared")
-    if no_path:
-        return no_path
+    system_path = shutil.which("cloudflared")
+    if system_path:
+        return system_path
 
     return "cloudflared"
 
-def aguardar_dns_tunel_pronto(url: str, max_tentativas: int = 15) -> bool:
-    sys.stdout.write("  [Cloudflared] Verificando conectividade Edge Cloudflare...")
+def wait_for_tunnel_dns(url: str, max_retries: int = 15) -> bool:
+    """Verifies that the trycloudflare.com URL is active and resolving."""
+    sys.stdout.write("  [Cloudflared] Verifying Cloudflare Edge connectivity...")
     sys.stdout.flush()
     domain = url.replace("https://", "").replace("http://", "").split("/")[0]
     health_url = f"{url}/health"
 
-    for _ in range(max_tentativas):
+    for _ in range(max_retries):
         try:
             req = urllib.request.Request(health_url, headers={"User-Agent": "Mozilla/5.0"}, method="GET")
             with urllib.request.urlopen(req, timeout=2) as resp:
                 if resp.status == 200:
-                    print(" OK! (Conectividade DNS 100% OK)")
+                    print(" OK! (DNS Connectivity 100% OK)")
                     return True
         except Exception:
             pass
@@ -43,7 +46,7 @@ def aguardar_dns_tunel_pronto(url: str, max_tentativas: int = 15) -> bool:
             with urllib.request.urlopen(req_doh, timeout=2) as resp_doh:
                 data = json.loads(resp_doh.read().decode('utf-8'))
                 if data.get("Status") == 0 and data.get("Answer"):
-                    print(" OK! (Registrado na Edge Cloudflare via 1.1.1.1 DoH)")
+                    print(" OK! (Registered on Cloudflare Edge via 1.1.1.1 DoH)")
                     return True
         except Exception:
             pass
@@ -52,15 +55,16 @@ def aguardar_dns_tunel_pronto(url: str, max_tentativas: int = 15) -> bool:
         sys.stdout.flush()
         time.sleep(0.5)
 
-    print(" (Aviso: DNS local lento; utilizando fallback 1.1.1.1/Local)")
+    print(" (Warning: Local DNS resolution slow; proceeding with fallback)")
     return False
 
-def iniciar_tunel_cloudflared(porta: int = 3001) -> tuple[subprocess.Popen | None, str | None]:
-    bin_path = obter_caminho_cloudflared()
-    cmd = [bin_path, "tunnel", "--no-autoupdate", "--protocol", "http2", "--url", f"http://127.0.0.1:{porta}"]
+def start_cloudflared_tunnel(port: int = 3001) -> tuple[subprocess.Popen | None, str | None]:
+    """Launches an ephemeral trycloudflare.com tunnel forwarding to local WebSocket port."""
+    bin_path = get_cloudflared_path()
+    cmd = [bin_path, "tunnel", "--no-autoupdate", "--protocol", "http2", "--url", f"http://127.0.0.1:{port}"]
 
     try:
-        print(f"  [Cloudflared] Inicializando túnel Cloudflare para porta {porta}...")
+        print(f"  [Cloudflared] Starting Cloudflare tunnel for port {port}...")
         proc = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
@@ -69,29 +73,32 @@ def iniciar_tunel_cloudflared(porta: int = 3001) -> tuple[subprocess.Popen | Non
             bufsize=1
         )
     except Exception as e:
-        print(f"  [Cloudflared] Não foi possível executar o cloudflared: {e}")
+        print(f"  [Cloudflared] Unable to launch cloudflared: {e}")
         return None, None
 
-    url_encontrada = None
+    url_found = None
     registered = False
-    for linha in iter(proc.stdout.readline, ''):
-        match = TRYCLOUDFLARE_REGEX.search(linha)
-        if match and not url_encontrada:
-            url_encontrada = match.group(0)
-            print(f"  [Cloudflared] Túnel detectado: {url_encontrada}.")
+    for line in iter(proc.stdout.readline, ''):
+        match = TRYCLOUDFLARE_REGEX.search(line)
+        if match and not url_found:
+            url_found = match.group(0)
+            print(f"  [Cloudflared] Detected tunnel URL: {url_found}.")
 
-        if "Registered tunnel connection" in linha or "Registered tunnel" in linha:
+        if "Registered tunnel connection" in line or "Registered tunnel" in line:
             registered = True
-            print("  [Cloudflared] Conexão com Edge Cloudflare registrada com sucesso!")
+            print("  [Cloudflared] Registered Cloudflare Edge connection successfully!")
 
-        if url_encontrada and registered:
-            aguardar_dns_tunel_pronto(url_encontrada)
+        if url_found and registered:
+            wait_for_tunnel_dns(url_found)
             break
 
-    if url_encontrada:
-        ws_url = url_encontrada.replace("https://", "wss://") + "/ws"
+    if url_found:
+        ws_url = url_found.replace("https://", "wss://") + "/ws"
         return proc, ws_url
 
     return proc, None
 
-iniciar_tunnel_cloudflared = iniciar_tunel_cloudflared
+# Backward compatibility aliases
+obter_caminho_cloudflared = get_cloudflared_path
+aguardar_dns_tunel_pronto = wait_for_tunnel_dns
+iniciar_tunel_cloudflared = start_cloudflared_tunnel

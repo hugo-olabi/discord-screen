@@ -22,13 +22,13 @@ def pop_keyframe_request() -> bool:
         return True
     return False
 
-def empacotar_pacote_midia(slot: int, is_keyframe: bool, pts_us: float, payload: bytes, tipo: int = -1) -> bytes:
+def pack_media_packet(slot: int, is_keyframe: bool, pts_us: float, payload: bytes, tipo: int = -1) -> bytes:
     """
-    Empacota o quadro no formato binário exato esperado pelo WebCodecs:
+    Packs media chunk into exact binary header expected by WebCodecs:
     [Byte 0: slot]
-    [Byte 1: tipo (1=Keyframe, 0=Delta, 3=Audio)]
-    [Bytes 2..9: timestamp em us (Float64 BigEndian)]
-    [Bytes 10..17: sentAt em ms (Float64 BigEndian)]
+    [Byte 1: type (1=Keyframe, 0=Delta, 3=Audio)]
+    [Bytes 2..9: timestamp in us (Float64 BigEndian)]
+    [Bytes 10..17: sentAt in ms (Float64 BigEndian)]
     [Bytes 18+: payload VP8/Opus]
     """
     buf = bytearray(18 + len(payload))
@@ -44,10 +44,9 @@ async def handle_ws(request):
     ws = web.WebSocketResponse(protocols=('chat', 'mqtt', ''))
     await ws.prepare(request)
     clients.add(ws)
-    logger.info(f"⚡ Cliente WebSocket conectado: {request.remote}")
+    logger.info(f"⚡ WebSocket client connected: {request.remote}")
 
     try:
-        # Envia mensagem inicial de boas-vindas com a configuração do WebCodecs de vídeo e áudio
         if not ws.closed:
             await ws.send_json({"type": "welcome", "slot": 0})
         if not ws.closed:
@@ -55,7 +54,7 @@ async def handle_ws(request):
         if not ws.closed:
             await ws.send_json({"type": "audio-config", "config": audio_config})
     except Exception as e:
-        logger.debug(f"Falha ao enviar handshake inicial (conexão resetada): {e}")
+        logger.debug(f"Handshake failed (connection reset): {e}")
         clients.discard(ws)
         return ws
 
@@ -69,14 +68,14 @@ async def handle_ws(request):
                         except Exception: pass
                 elif data.get("type") == "request-keyframe":
                     keyframe_requested = True
-                    logger.info("🔑 Solicitado Keyframe emergencial do cliente")
+                    logger.info("🔑 Keyframe requested by client")
             elif msg.type == WSMsgType.ERROR:
                 logger.warning(f"WebSocket error: {ws.exception()}")
     except Exception as e:
-        logger.debug(f"Conexão WebSocket finalizada: {e}")
+        logger.debug(f"WebSocket connection closed: {e}")
     finally:
         clients.discard(ws)
-        logger.info(f"Cliente WebSocket desconectado: {request.remote}")
+        logger.info(f"WebSocket client disconnected: {request.remote}")
 
     return ws
 
@@ -103,7 +102,7 @@ async def broadcast_json(data: dict):
         except Exception:
             clients.discard(ws)
 
-async def atualizar_config_e_notificar(new_video_cfg=None, new_audio_cfg=None):
+async def update_config_and_notify(new_video_cfg=None, new_audio_cfg=None):
     if new_video_cfg:
         video_config.update(new_video_cfg)
         await broadcast_json({"type": "config", "config": video_config})
@@ -112,9 +111,8 @@ async def atualizar_config_e_notificar(new_video_cfg=None, new_audio_cfg=None):
         await broadcast_json({"type": "audio-config", "config": audio_config})
 
 async def streamer_video_loop(out_stream):
-    """Lê quadros IVF do encoder FFmpeg/GStreamer e transmite para todos os WebSockets."""
+    """Reads IVF frames from FFmpeg/GStreamer encoder and broadcasts to WebSockets."""
     try:
-        # 1. Ler cabeçalho IVF (32 bytes)
         hdr32 = await out_stream.readexactly(32)
         is_vp9 = False
         if len(hdr32) == 32 and hdr32[:4] == b'DKIF':
@@ -129,17 +127,17 @@ async def streamer_video_loop(out_stream):
             video_config["fps"] = round(fps_num / fps_den) if fps_den > 0 else 30
 
         start_time = time.time()
-        ultimo_pts = -1
-        primeiro_quadro = True
+        last_pts = -1
+        first_frame = True
 
         while True:
             hdr12 = await out_stream.readexactly(12)
             frame_size, timestamp = struct.unpack('<IQ', hdr12)
             frame_bytes = await out_stream.readexactly(frame_size)
 
-            if primeiro_quadro:
+            if first_frame:
                 is_keyframe = True
-                primeiro_quadro = False
+                first_frame = False
             elif len(frame_bytes) > 0:
                 if is_vp9:
                     is_keyframe = (frame_bytes[0] & 0x04) == 0
@@ -149,19 +147,19 @@ async def streamer_video_loop(out_stream):
                 is_keyframe = False
 
             now_pts = int((time.time() - start_time) * 1_000_000)
-            if now_pts <= ultimo_pts:
-                now_pts = ultimo_pts + 1
-            ultimo_pts = now_pts
+            if now_pts <= last_pts:
+                now_pts = last_pts + 1
+            last_pts = now_pts
 
-            packet = empacotar_pacote_midia(0, is_keyframe, now_pts, frame_bytes, tipo=1 if is_keyframe else 0)
+            packet = pack_media_packet(0, is_keyframe, now_pts, frame_bytes, tipo=1 if is_keyframe else 0)
             await broadcast_bytes(packet)
     except asyncio.IncompleteReadError:
         pass
     except Exception as e:
-        logger.debug(f"Loop de vídeo encerrado: {e}")
+        logger.debug(f"Video loop closed: {e}")
 
 async def streamer_audio_loop(audio_stream):
-    """Lê pacotes Ogg Opus do FFmpeg e transmite quadros tipo=3 para os clientes WebSocket."""
+    """Reads Ogg Opus packets from FFmpeg and broadcasts type=3 chunks to WebSockets."""
     if not audio_stream:
         return
     audio_pts = 0
@@ -213,17 +211,16 @@ async def streamer_audio_loop(audio_stream):
                 offset += seg_len
                 if seg_len < 255:
                     if len(pkt) > 0 and not pkt.startswith(b'OpusHead') and not pkt.startswith(b'OpusTags'):
-                        packet = empacotar_pacote_midia(0, False, audio_pts, bytes(pkt), tipo=3)
+                        packet = pack_media_packet(0, False, audio_pts, bytes(pkt), tipo=3)
                         await broadcast_bytes(packet)
                         audio_pts += 20_000
                     pkt = bytearray()
     except asyncio.IncompleteReadError:
         pass
     except Exception as e:
-        logger.debug(f"Loop de áudio encerrado: {e}")
+        logger.debug(f"Audio loop closed: {e}")
 
-
-async def iniciar_servidor_ws(porta: int = 3001) -> tuple[web.AppRunner, int]:
+async def start_ws_server(port: int = 3001) -> tuple[web.AppRunner, int]:
     app = web.Application()
     app.router.add_get('/', handle_health)
     app.router.add_get('/health', handle_health)
@@ -232,11 +229,11 @@ async def iniciar_servidor_ws(porta: int = 3001) -> tuple[web.AppRunner, int]:
     runner = web.AppRunner(app)
     await runner.setup()
 
-    for p in range(porta, porta + 20):
+    for p in range(port, port + 20):
         try:
             site = web.TCPSite(runner, '0.0.0.0', p)
             await site.start()
-            logger.info(f"🚀 Servidor WebSocket do Streamer ativo na porta {p}")
+            logger.info(f"🚀 Streamer WebSocket server active on port {p}")
             return runner, p
         except OSError:
             continue
@@ -245,3 +242,8 @@ async def iniciar_servidor_ws(porta: int = 3001) -> tuple[web.AppRunner, int]:
     await site.start()
     assigned_port = site._server.sockets[0].getsockname()[1]
     return runner, assigned_port
+
+# Backward compatibility aliases
+empacotar_pacote_midia = pack_media_packet
+atualizar_config_e_notificar = update_config_and_notify
+iniciar_servidor_ws = start_ws_server

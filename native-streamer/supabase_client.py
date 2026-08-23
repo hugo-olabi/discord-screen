@@ -10,12 +10,12 @@ env_key = os.getenv("SUPABASE_ANON_KEY", os.getenv("VITE_SUPABASE_ANON_KEY", "")
 SUPABASE_ANON_KEY = env_key if env_key.startswith("eyJ") else JWT_ANON_KEY
 
 
-def atualizar_url_tunel_supabase(token_id: str, tunnel_url: str, status: str = "live") -> bool:
+def update_supabase_tunnel_url(token_id: str, tunnel_url: str, status: str = "live") -> bool:
     """
-    Atualiza (ou faz upsert) na tabela 'rooms' no Supabase com o URL do túnel UDP e status 'live'.
+    Updates or upserts room state in Supabase 'rooms' table with tunnel URL and status.
     """
     if not token_id:
-        print("  [Supabase] Token da sala não fornecido.")
+        print("  [Supabase] Room token not provided.")
         return False
 
     url = f"{SUPABASE_URL.rstrip('/')}/rest/v1/rooms"
@@ -28,7 +28,7 @@ def atualizar_url_tunel_supabase(token_id: str, tunnel_url: str, status: str = "
 
     payload = {
         "id": token_id,
-        "name": f"Sala {token_id[:6]}",
+        "name": f"Room {token_id[:6]}",
         "tunnel_url": tunnel_url,
         "status": status,
         "updated_at": "now()"
@@ -39,12 +39,14 @@ def atualizar_url_tunel_supabase(token_id: str, tunnel_url: str, status: str = "
         req = urllib.request.Request(url, data=data, headers=headers, method="POST")
         with urllib.request.urlopen(req, timeout=10) as resp:
             if resp.status in (200, 201, 204):
-                print(f"  [Supabase] URL do túnel publicado com sucesso no Supabase! ({tunnel_url})")
+                print(f"  [Supabase] Tunnel URL successfully published to Supabase! ({tunnel_url})")
                 return True
     except urllib.error.HTTPError as e:
-        print(f"  [Supabase] Erro HTTP ao atualizar sala ({e.code}): {e.reason}")
+        print(f"  [Supabase] HTTP Error updating room ({e.code}): {e.reason}")
     except Exception as e:
-        print(f"  [Supabase] Falha ao comunicar com Supabase: {e}")
+        print(f"  [Supabase] Failed to communicate with Supabase: {e}")
 
     return False
 
+# Backward compatibility alias
+atualizar_url_tunel_supabase = update_supabase_tunnel_url

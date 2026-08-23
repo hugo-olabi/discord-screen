@@ -1,44 +1,43 @@
-# Native System Streamer (FFmpeg)
+# StreamRoom Native Streamer (Python & FFmpeg)
 
-Este repositório inclui um transmissor nativo via **FFmpeg** que permite transmitir a tela e o áudio do sistema operacional **diretamente do terminal**, sem precisar abrir o navegador nem manter instâncias do Chromium rodando.
+StreamRoom includes a standalone native streamer written in Python (GTK4 / CLI) utilizing **FFmpeg** and **GStreamer** to capture and stream desktop screens and system audio directly with zero browser overhead.
 
 ---
 
-## 🚀 Como Usar
+## 🚀 How to Use
 
-### 1. Pré-requisito
-Certifique-se de ter o `ffmpeg` instalado no sistema operacional:
-- **Linux (Ubuntu/Debian)**: `sudo apt install ffmpeg`
-- **Arch Linux**: `sudo pacman -S ffmpeg`
-- **Windows / macOS**: Instale via `winget install FFmpeg.FFmpeg` ou `brew install ffmpeg`.
+### 1. Prerequisites
+Ensure `ffmpeg` and Python 3 are installed on your OS:
+- **Linux (Ubuntu/Debian)**: `sudo apt install ffmpeg python3-gi python3-gi-cairo`
+- **Arch Linux**: `sudo pacman -S ffmpeg python-gobject`
+- **Windows / macOS**: Install via `winget install FFmpeg.FFmpeg` or `brew install ffmpeg`.
 
-### 2. Transmitir
+### 2. Start Broadcast
 
-#### Auto-conexão (no mesmo computador onde o servidor roda)
+#### Launch GTK4 Interface (or CLI fallback):
 ```bash
 npm run stream
 ```
 
-#### Transmitir usando Token de Sala Específico
+#### Stream with Specific Room Token:
 ```bash
-npm run stream -- --token=<SEU_TOKEN_DE_TRANSMISSAO>
+npm run stream -- --token=<STREAM_TOKEN>
 ```
 
-#### Opções Avançadas de Captura
+#### Advanced Capture Parameters:
 ```bash
-npm run stream -- --token=<TOKEN> --fps=60 --bitrate=4000k --hwaccel=nvenc
+npm run stream -- --token=<TOKEN> --fps=60 --bitrate=12000k --profile=cinema
 ```
 
 ---
 
-## ⚙️ Parâmetros Suportados
+## ⚙️ Supported Command-Line Flags
 
-| Parâmetro | Padrão | Descrição |
+| Flag | Default | Description |
 | --- | --- | --- |
-| `--token` | Auto-gerado | Token de transmissão da sala. |
-| `--server` | `http://localhost:3001` | Endereço do servidor `streamroom`. |
-| `--fps` | `30` | Taxa de quadros (FPS) da captura. |
-| `--bitrate` | `2500k` | Taxa de transmissão de vídeo. |
-| `--hwaccel` | `auto` | Aceleração por GPU (`auto`, `nvenc`, `vaapi`, `qsv`). |
-| `--video-device` | Auto-detectado | Dispositivo de entrada de vídeo personalizado. |
-| `--audio-device` | Auto-detectado | Dispositivo de entrada de áudio personalizado. |
+| `--token` | Prompted | Stream Token / Room ID. |
+| `--server` | `http://localhost:3001` | StreamRoom server origin URL. |
+| `--fps` | `60` | Capture framerate (FPS). |
+| `--bitrate` | `12000k` | Video bitrate (e.g. `12000k`, `8000k`, `4000k`). |
+| `--profile` | `cinema` | Quality profile (`cinema`, `mobile`, `balanced`, `fast`). |
+| `--audio-source` | `system` | Audio capture source (`system`, `app`, `mic`, `none`). |

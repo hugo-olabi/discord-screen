@@ -3,11 +3,11 @@ import re
 import subprocess
 import sys
 
-def listar_janelas() -> list[dict]:
+def list_windows() -> list[dict]:
     """
-    Lista janelas abertas no sistema operacional (Linux xprop, Windows PowerShell).
+    Lists active window titles and IDs on the OS (Linux xprop, Windows PowerShell).
     """
-    janelas = []
+    windows = []
     platform = sys.platform
 
     if platform.startswith('linux'):
@@ -22,7 +22,7 @@ def listar_janelas() -> list[dict]:
                     if name_match and name_match.group(1).strip():
                         title = name_match.group(1).strip()
                         is_discord = bool(re.search(r'discord', title, re.IGNORECASE))
-                        janelas.append({"id": window_id, "title": title, "isDiscord": is_discord})
+                        windows.append({"id": window_id, "title": title, "isDiscord": is_discord})
                 except Exception:
                     pass
         except Exception:
@@ -38,8 +38,11 @@ def listar_janelas() -> list[dict]:
                 if item and item.get("MainWindowTitle"):
                     title = item["MainWindowTitle"].strip()
                     is_discord = bool(re.search(r'discord', title, re.IGNORECASE))
-                    janelas.append({"id": f"title={title}", "title": title, "isDiscord": is_discord})
+                    windows.append({"id": f"title={title}", "title": title, "isDiscord": is_discord})
         except Exception:
             pass
 
-    return janelas
+    return windows
+
+# Backward compatibility alias
+listar_janelas = list_windows
