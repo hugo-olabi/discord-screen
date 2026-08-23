@@ -77,11 +77,10 @@ export function createPlayer(canvas, { onError, onTamanho, onRequestKeyframe } =
     // Decoder frio só aceita keyframe; deltas antes disso viram erro.
     if (needKeyframe && !isKeyframe) return;
 
-    // Backpressure para mobile: se a fila de decodificação acumulou quadros (>8), descarta deltas e solicita Keyframe limpo
-    if (!isKeyframe && decoder.decodeQueueSize > 8) {
-      needKeyframe = true;
+    // Backpressure: se a fila de decodificação acumulou muitos quadros (>10), descarta o delta excedente para drenar a fila sem desativar quadros futuros
+    if (!isKeyframe && decoder.decodeQueueSize > 10) {
       const now = Date.now();
-      if (now - lastKeyframeRequestTime > 1000) {
+      if (now - lastKeyframeRequestTime > 1500) {
         lastKeyframeRequestTime = now;
         onRequestKeyframe?.();
       }
