@@ -48,20 +48,32 @@ async def handle_ws(request):
 
     try:
         # Envia mensagem inicial de boas-vindas com a configuração do WebCodecs de vídeo e áudio
-        await ws.send_json({"type": "welcome", "slot": 0})
-        await ws.send_json({"type": "config", "config": video_config})
-        await ws.send_json({"type": "audio-config", "config": audio_config})
+        if not ws.closed:
+            await ws.send_json({"type": "welcome", "slot": 0})
+        if not ws.closed:
+            await ws.send_json({"type": "config", "config": video_config})
+        if not ws.closed:
+            await ws.send_json({"type": "audio-config", "config": audio_config})
+    except Exception as e:
+        logger.debug(f"Falha ao enviar handshake inicial (conexão resetada): {e}")
+        clients.discard(ws)
+        return ws
 
+    try:
         async for msg in ws:
             if msg.type == WSMsgType.TEXT:
                 data = json.loads(msg.data)
                 if data.get("type") == "ping":
-                    await ws.send_json({"type": "pong"})
+                    if not ws.closed:
+                        try: await ws.send_json({"type": "pong"})
+                        except Exception: pass
                 elif data.get("type") == "request-keyframe":
                     keyframe_requested = True
                     logger.info("🔑 Solicitado Keyframe emergencial do cliente")
             elif msg.type == WSMsgType.ERROR:
                 logger.warning(f"WebSocket error: {ws.exception()}")
+    except Exception as e:
+        logger.debug(f"Conexão WebSocket finalizada: {e}")
     finally:
         clients.discard(ws)
         logger.info(f"Cliente WebSocket desconectado: {request.remote}")
@@ -81,6 +93,24 @@ async def broadcast_bytes(data: bytes):
         except Exception:
             clients.discard(ws)
 
+async def broadcast_json(data: dict):
+    if not clients:
+        return
+    for ws in list(clients):
+        try:
+            if not ws.closed:
+                await ws.send_json(data)
+        except Exception:
+            clients.discard(ws)
+
+async def atualizar_config_e_notificar(new_video_cfg=None, new_audio_cfg=None):
+    if new_video_cfg:
+        video_config.update(new_video_cfg)
+        await broadcast_json({"type": "config", "config": video_config})
+    if new_audio_cfg:
+        audio_config.update(new_audio_cfg)
+        await broadcast_json({"type": "audio-config", "config": audio_config})
+
 async def streamer_video_loop(out_stream):
     """Lê quadros IVF do encoder FFmpeg/GStreamer e transmite para todos os WebSockets."""
     try:
@@ -90,7 +120,7 @@ async def streamer_video_loop(out_stream):
         if len(hdr32) == 32 and hdr32[:4] == b'DKIF':
             fourcc = hdr32[8:12].decode('ascii', errors='ignore').strip().lower()
             is_vp9 = 'vp9' in fourcc
-            video_config["codec"] = "vp09.00.10.08" if is_vp9 else "vp8"
+            video_config["codec"] = "vp09.00.31.08" if is_vp9 else "vp8"
 
             width, height = struct.unpack('<HH', hdr32[12:16])
             fps_num, fps_den = struct.unpack('<II', hdr32[16:24])

@@ -97,7 +97,7 @@ async def iniciar_processo_captura(pipewire_node: str | None = None, pipewire_fd
         return cp, proc.stdout, proc.stderr
 
     bitrate_bps = str(int(bitrate.replace("k", "")) * 1000) if "k" in bitrate else "12000000"
-    keyframe_dist = str(min(fps, 30))
+    keyframe_dist = str(max(15, fps // 2))
 
     ivf_muxer = "avmux_ivf" if tem_gstreamer_element("avmux_ivf") else ("ivfenc" if tem_gstreamer_element("ivfenc") else None)
 
@@ -255,7 +255,7 @@ def montar_comando_pipewire_gstreamer(pipewire_node: str, pipewire_fd: int | Non
 def montar_comando_ffmpeg(fps: int = 30, bitrate: str = "2500k", window_id: str | None = None, profile: str = "cinema") -> tuple[list[str] | str, bool]:
     fps, bitrate, maxrate, bufsize = obter_perfil_qualidade(profile=profile, custom_fps=fps, custom_bitrate=bitrate)
     platform = sys.platform
-    keyframe_interval = str(min(fps, 30))
+    keyframe_interval = str(max(15, fps // 2))
     
     cmd = [
         "ffmpeg",
