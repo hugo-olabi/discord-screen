@@ -1498,9 +1498,16 @@ function connectWebCodecsWebSocket(wsUrl, forceRetry = false) {
 
         wsReconnectAttempts++;
         if (wsReconnectAttempts > MAX_WS_RECONNECT_ATTEMPTS) {
-          console.warn(`[WebSocket notice] Túnel Cloudflare inacessível após ${MAX_WS_RECONNECT_ATTEMPTS} tentativas. Interrompendo reconexão até novo túnel.`);
+          console.warn(`[WebSocket notice] Túnel Cloudflare inacessível após ${MAX_WS_RECONNECT_ATTEMPTS} tentativas.`);
           failedTunnelUrls.add(wsUrl);
           stopWebCodecsWebSocket(true);
+
+          if (wsUrl.includes('trycloudflare.com') && !wsUrl.includes('127.0.0.1')) {
+            console.warn('[WebSocket notice] Tentando conexão direta local (127.0.0.1:3001)...');
+            connectWebCodecsWebSocket('ws://127.0.0.1:3001/ws', true);
+            return;
+          }
+
           setEmpty('Túnel Inacessível ⚠️', 'O túnel de transmissão expirou ou caiu. Aguardando novo túnel...');
           return;
         }
