@@ -13,6 +13,14 @@ active_out_stream = None
 active_audio_stream = None
 video_config = {"codec": "vp8", "codedWidth": 1280, "codedHeight": 720, "fps": 30}
 audio_config = {"codec": "opus", "sampleRate": 48000, "numberOfChannels": 2}
+keyframe_requested = False
+
+def pop_keyframe_request() -> bool:
+    global keyframe_requested
+    if keyframe_requested:
+        keyframe_requested = False
+        return True
+    return False
 
 def empacotar_pacote_midia(slot: int, is_keyframe: bool, pts_us: float, payload: bytes, tipo: int = -1) -> bytes:
     """
@@ -32,6 +40,7 @@ def empacotar_pacote_midia(slot: int, is_keyframe: bool, pts_us: float, payload:
     return bytes(buf)
 
 async def handle_ws(request):
+    global keyframe_requested
     ws = web.WebSocketResponse(protocols=('chat', 'mqtt', ''))
     await ws.prepare(request)
     clients.add(ws)
@@ -48,6 +57,9 @@ async def handle_ws(request):
                 data = json.loads(msg.data)
                 if data.get("type") == "ping":
                     await ws.send_json({"type": "pong"})
+                elif data.get("type") == "request-keyframe":
+                    keyframe_requested = True
+                    logger.info("🔑 Solicitado Keyframe emergencial do cliente")
             elif msg.type == WSMsgType.ERROR:
                 logger.warning(f"WebSocket error: {ws.exception()}")
     finally:
@@ -122,42 +134,58 @@ async def streamer_audio_loop(audio_stream):
     """Lê pacotes Ogg Opus do FFmpeg e transmite quadros tipo=3 para os clientes WebSocket."""
     if not audio_stream:
         return
-    start_audio_time = time.time()
-    ultimo_audio_pts = -1
+    audio_pts = 0
+    buf = bytearray()
+
     try:
         while True:
-            header = await audio_stream.readexactly(27)
-            if header[:4] != b'OggS':
-                chunk = header + await audio_stream.read(485)
+            while len(buf) < 27:
+                chunk = await audio_stream.read(4096)
                 if not chunk:
-                    break
-                now_pts = int((time.time() - start_audio_time) * 1_000_000)
-                if now_pts <= ultimo_audio_pts:
-                    now_pts = ultimo_audio_pts + 1
-                ultimo_audio_pts = now_pts
-                packet = empacotar_pacote_midia(0, False, now_pts, chunk, tipo=3)
-                await broadcast_bytes(packet)
+                    return
+                buf.extend(chunk)
+
+            idx = buf.find(b'OggS')
+            if idx == -1:
+                buf = buf[-3:]
+                continue
+            elif idx > 0:
+                buf = buf[idx:]
+
+            if len(buf) < 27:
                 continue
 
-            num_segments = header[26]
-            seg_table = await audio_stream.readexactly(num_segments)
+            num_segments = buf[26]
+            header_and_seg_len = 27 + num_segments
+            while len(buf) < header_and_seg_len:
+                chunk = await audio_stream.read(4096)
+                if not chunk:
+                    return
+                buf.extend(chunk)
+
+            seg_table = buf[27:header_and_seg_len]
             payload_len = sum(seg_table)
-            payload = await audio_stream.readexactly(payload_len)
+            page_len = header_and_seg_len + payload_len
+
+            while len(buf) < page_len:
+                chunk = await audio_stream.read(4096)
+                if not chunk:
+                    return
+                buf.extend(chunk)
+
+            page_payload = bytes(buf[header_and_seg_len:page_len])
+            del buf[:page_len]
 
             offset = 0
             pkt = bytearray()
             for seg_len in seg_table:
-                pkt.extend(payload[offset:offset + seg_len])
+                pkt.extend(page_payload[offset:offset + seg_len])
                 offset += seg_len
                 if seg_len < 255:
                     if len(pkt) > 0 and not pkt.startswith(b'OpusHead') and not pkt.startswith(b'OpusTags'):
-                        now_pts = int((time.time() - start_audio_time) * 1_000_000)
-                        if now_pts <= ultimo_audio_pts:
-                            now_pts = ultimo_audio_pts + 1
-                        ultimo_audio_pts = now_pts
-
-                        packet = empacotar_pacote_midia(0, False, now_pts, bytes(pkt), tipo=3)
+                        packet = empacotar_pacote_midia(0, False, audio_pts, bytes(pkt), tipo=3)
                         await broadcast_bytes(packet)
+                        audio_pts += 20_000
                     pkt = bytearray()
     except asyncio.IncompleteReadError:
         pass

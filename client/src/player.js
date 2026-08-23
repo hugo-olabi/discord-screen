@@ -15,13 +15,14 @@
  * imagem durante o redimensionamento.
  */
 
-export function createPlayer(canvas, { onError, onTamanho } = {}) {
+export function createPlayer(canvas, { onError, onTamanho, onRequestKeyframe } = {}) {
   const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
 
   let decoder = null;
   let needKeyframe = true;
   let lastLagMs = 0;
   let framesDrawn = 0;
+  let lastKeyframeRequestTime = 0;
   // Quem espera precisa saber quando a espera acabou: entre pedir para assistir
   // e o primeiro quadro cabe um keyframe inteiro de atraso, e o canvas preto
   // desse intervalo é idêntico a um travamento.
@@ -76,8 +77,14 @@ export function createPlayer(canvas, { onError, onTamanho } = {}) {
     // Decoder frio só aceita keyframe; deltas antes disso viram erro.
     if (needKeyframe && !isKeyframe) return;
 
-    // Backpressure: se o decoder acumulou muitos quadros na fila (>12), descartar deltas para manter tempo real sem travar a reprodução
-    if (!isKeyframe && decoder.decodeQueueSize > 12) {
+    // Backpressure para mobile: se a fila de decodificação acumulou quadros (>8), descarta deltas e solicita Keyframe limpo
+    if (!isKeyframe && decoder.decodeQueueSize > 8) {
+      needKeyframe = true;
+      const now = Date.now();
+      if (now - lastKeyframeRequestTime > 1000) {
+        lastKeyframeRequestTime = now;
+        onRequestKeyframe?.();
+      }
       return;
     }
 

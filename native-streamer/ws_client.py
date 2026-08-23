@@ -114,44 +114,58 @@ async def iniciar_transmissao_websocket(server_url: str, token: str, stdout_stre
 
                 async def loop_audio_envio():
                     nonlocal slot_idx
-                    start_audio_time = time.time()
-                    ultimo_audio_pts = -1
+                    audio_pts = 0
                     stream = audio_stream.stdout
+                    buf = bytearray()
                     try:
                         while True:
-                            header = await stream.readexactly(27)
-                            if header[:4] != b'OggS':
-                                # Fallback se não for contêiner Ogg
-                                chunk = header + await stream.read(485)
+                            while len(buf) < 27:
+                                chunk = await stream.read(4096)
                                 if not chunk:
-                                    break
-                                now_pts = int((time.time() - start_audio_time) * 1_000_000)
-                                if now_pts <= ultimo_audio_pts:
-                                    now_pts = ultimo_audio_pts + 1
-                                ultimo_audio_pts = now_pts
-                                packet = empacotar_pacote_midia(slot_idx, False, now_pts, chunk, tipo=3)
-                                await ws.send_bytes(packet)
+                                    return
+                                buf.extend(chunk)
+
+                            idx = buf.find(b'OggS')
+                            if idx == -1:
+                                buf = buf[-3:]
+                                continue
+                            elif idx > 0:
+                                buf = buf[idx:]
+
+                            if len(buf) < 27:
                                 continue
 
-                            num_segments = header[26]
-                            seg_table = await stream.readexactly(num_segments)
+                            num_segments = buf[26]
+                            header_and_seg_len = 27 + num_segments
+                            while len(buf) < header_and_seg_len:
+                                chunk = await stream.read(4096)
+                                if not chunk:
+                                    return
+                                buf.extend(chunk)
+
+                            seg_table = buf[27:header_and_seg_len]
                             payload_len = sum(seg_table)
-                            payload = await stream.readexactly(payload_len)
+                            page_len = header_and_seg_len + payload_len
+
+                            while len(buf) < page_len:
+                                chunk = await stream.read(4096)
+                                if not chunk:
+                                    return
+                                buf.extend(chunk)
+
+                            page_payload = bytes(buf[header_and_seg_len:page_len])
+                            del buf[:page_len]
 
                             offset = 0
                             pkt = bytearray()
                             for seg_len in seg_table:
-                                pkt.extend(payload[offset:offset + seg_len])
+                                pkt.extend(page_payload[offset:offset + seg_len])
                                 offset += seg_len
                                 if seg_len < 255:
                                     if len(pkt) > 0 and not pkt.startswith(b'OpusHead') and not pkt.startswith(b'OpusTags'):
-                                        now_pts = int((time.time() - start_audio_time) * 1_000_000)
-                                        if now_pts <= ultimo_audio_pts:
-                                            now_pts = ultimo_audio_pts + 1
-                                        ultimo_audio_pts = now_pts
-
-                                        packet = empacotar_pacote_midia(slot_idx, False, now_pts, bytes(pkt), tipo=3)
+                                        packet = empacotar_pacote_midia(slot_idx, False, audio_pts, bytes(pkt), tipo=3)
                                         await ws.send_bytes(packet)
+                                        audio_pts += 20_000
                                     pkt = bytearray()
                     except Exception:
                         pass

@@ -117,16 +117,16 @@ def main():
         elif arg == "--no-audio":
             audio_source = "none"
 
-    if not use_noise and audio_source == "system":
-        print("\n  Escolha a fonte de áudio:")
-        print("    1) Áudio do Sistema (Desktop / Geral)")
-        print("    2) Áudio do Aplicativo Selecionado")
-        print("    3) Microfone")
-        print("    4) Sem Áudio")
-        a_choice = input("  Selecione a fonte de áudio [1-4] (Padrão 1): ").strip()
-        if a_choice == "2": audio_source = "app"
-        elif a_choice == "3": audio_source = "mic"
-        elif a_choice == "4": audio_source = "none"
+    if not any(arg.startswith("--profile=") for arg in args):
+        print("\n  Escolha o perfil de qualidade:")
+        print("    1) Cinema 1080p (60fps, 12 Mbps - Padrão Desktop)")
+        print("    2) Mobile 720p (30fps, 4 Mbps - Otimizado para Android)")
+        print("    3) Balanced 720p (30fps, 8 Mbps)")
+        print("    4) Fast 480p (30fps, 4 Mbps)")
+        p_choice = input("  Selecione o perfil [1-4] (Padrão 1): ").strip()
+        if p_choice == "2": profile = "mobile"
+        elif p_choice == "3": profile = "balanced"
+        elif p_choice == "4": profile = "fast"
 
     print(f"\n  Servidor: {server_url}")
     print(f"  Perfil de Qualidade: {profile.upper()} (Zero-Latency / Static Deduplication)")

@@ -910,6 +910,11 @@ function openStream(slot, userId) {
         s.started = true;
         renderGrid();
       },
+      onRequestKeyframe: () => {
+        if (currentWs && currentWs.readyState === WebSocket.OPEN) {
+          currentWs.send(JSON.stringify({ type: 'request-keyframe' }));
+        }
+      },
     }),
     // Só nasce quando a transmissão anuncia que tem som — nem toda tem.
     audio: null,

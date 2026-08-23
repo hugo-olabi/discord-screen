@@ -48,6 +48,7 @@ def obter_perfil_qualidade(profile: str = "cinema", custom_fps: int | None = Non
         "cinema": (60, "12000k", "16000k", "24000k"),
         "balanced": (30, "8000k", "10000k", "16000k"),
         "fast": (30, "4000k", "6000k", "8000k"),
+        "mobile": (30, "4000k", "6000k", "8000k"),
     }
     fps, bitrate, maxrate, bufsize = profiles.get(profile.lower(), profiles["cinema"])
     if custom_fps:
@@ -213,6 +214,9 @@ async def iniciar_processo_captura_audio(audio_source: str = "system", source_na
         "ffmpeg", "-loglevel", "warning",
         "-f", "pulse", "-i", dev,
         "-c:a", "libopus", "-b:a", "128k", "-ar", "48000", "-ac", "2",
+        "-frame_duration", "20", "-application", "lowdelay",
+        "-page_duration", "20000",
+        "-flush_packets", "1",
         "-f", "opus", "pipe:1"
     ]
     proc = await asyncio.create_subprocess_exec(
@@ -280,8 +284,9 @@ def montar_comando_ffmpeg(fps: int = 30, bitrate: str = "2500k", window_id: str 
     else:
         cmd.extend(["-f", "x11grab", "-framerate", str(fps), "-i", ":0.0"])
 
-    # Filtro de downscaling para max 1080p mantendo framerate constante e fluido
-    cmd.extend(["-vf", "scale='min(1920,iw)':-2:flags=lanczos"])
+    # Filtro de downscaling mantendo framerate constante e fluido (1280p para mobile, 1080p para pc)
+    scale_w = 1280 if profile.lower() == "mobile" else 1920
+    cmd.extend(["-vf", f"scale='min({scale_w},iw)':-2:flags=lanczos"])
 
     # Selecionar o melhor codec suportado para o container IVF (VP9 > VP8)
     if tem_ffmpeg_encoder("libvpx-vp9"):

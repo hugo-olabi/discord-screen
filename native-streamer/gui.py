@@ -93,6 +93,21 @@ class RecordingSetupModal(Gtk.Window):
         audio_box.append(self.audio_dropdown)
         main_box.append(audio_box)
 
+        # Profile selection
+        profile_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        profile_box.set_halign(Gtk.Align.CENTER)
+        profile_label = Gtk.Label(label="Stream Profile:")
+        self.profile_dropdown = Gtk.DropDown.new_from_strings([
+            "Cinema (1080p / 12 Mbps)",
+            "Mobile (720p / 4 Mbps - Android Optimization)",
+            "Balanced (720p / 8 Mbps)",
+            "Fast (480p / 4 Mbps)"
+        ])
+        self.profile_dropdown.set_selected(0)
+        profile_box.append(profile_label)
+        profile_box.append(self.profile_dropdown)
+        main_box.append(profile_box)
+
         # Bottom Stream Action button (disabled until source selected)
         self.stream_btn = Gtk.Button(label="Stream")
         self.stream_btn.add_css_class("suggested-action")
@@ -114,8 +129,6 @@ class RecordingSetupModal(Gtk.Window):
                     node, fd, is_screen = None, None, True
             else:
                 node, fd, is_screen = None, None, True
-
-
 
             def update_ui():
                 if node:
@@ -148,6 +161,8 @@ class RecordingSetupModal(Gtk.Window):
         fps = 60 if self.fps_60.get_active() else (15 if self.fps_15.get_active() else 30)
         audio_map = {0: "system", 1: "app", 2: "mic", 3: "none"}
         audio_source = audio_map.get(self.audio_dropdown.get_selected(), "system")
+        profile_map = {0: "cinema", 1: "mobile", 2: "balanced", 3: "fast"}
+        profile = profile_map.get(self.profile_dropdown.get_selected(), "cinema")
 
         config = {
             "pipewire_node": self.pipewire_node,
@@ -156,6 +171,7 @@ class RecordingSetupModal(Gtk.Window):
             "window_id": self.selected_window_id,
             "source_name": self.selected_source_name,
             "fps": fps,
+            "profile": profile,
             "audio_source": audio_source,
             "stream_audio": audio_source != "none"
         }
