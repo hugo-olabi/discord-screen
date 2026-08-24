@@ -7,7 +7,7 @@ export default defineConfig({
     solidPlugin(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['streamroom-banner.png'],
+      includeAssets: ['icon.svg', 'icon.png', 'streamroom-banner.png'],
       manifest: {
         name: 'StreamRoom',
         short_name: 'StreamRoom',
@@ -17,14 +17,19 @@ export default defineConfig({
         display: 'standalone',
         icons: [
           {
-            src: 'streamroom-banner.png',
+            src: 'icon.png',
             sizes: '192x192',
             type: 'image/png',
           },
           {
-            src: 'streamroom-banner.png',
+            src: 'icon.png',
             sizes: '512x512',
             type: 'image/png',
+          },
+          {
+            src: 'icon.svg',
+            sizes: 'any',
+            type: 'image/svg+xml',
           },
         ],
       },
