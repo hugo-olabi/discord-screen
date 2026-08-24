@@ -43,6 +43,7 @@ export async function fetchRoomByToken(token: string) {
  */
 export async function createRoomRecord({ token, name, password, streamerName, streamerId }: any) {
   const roomData = {
+    id: token,
     token: token,
     name: name || `Stream ${token}`,
     password: password || null,
