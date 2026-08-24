@@ -942,30 +942,69 @@ button {
 .user-chip {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
-  height: 40px;
-  max-width: 220px;
-  padding: 0 14px 0 5px;
-  border: 0;
+  gap: 8px;
+  height: 36px;
+  max-width: 200px;
+  padding: 0 12px 0 4px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 999px;
-  background: var(--tile);
+  background: rgba(255, 255, 255, 0.06);
   color: var(--text);
-  font: 600 13.5px/1 inherit;
-  transition: background 0.15s;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  overflow: hidden;
+  box-sizing: border-box;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .user-chip:hover {
-  background: #43454b;
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.18);
 }
 
-/* O avatar do tile usa largura fluida (clamp); aqui ele é fixo. */
-.user-chip .avatar {
-  width: 30px;
-  height: 30px;
-  flex: 0 0 auto;
+.user-chip .avatar-sm,
+.avatar-sm {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  flex: 0 0 28px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #5865f2;
+  color: #ffffff;
   font-size: 12px;
+  font-weight: 700;
 }
 
+.avatar-sm img {
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  display: block;
+}
+
+.avatar-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #5865f2;
+  color: #fff;
+  font-weight: 700;
+  font-size: 12px;
+  border-radius: 50%;
+}
+
+.user-chip .user-chip-name,
 .user-chip span {
   min-width: 0;
   overflow: hidden;
