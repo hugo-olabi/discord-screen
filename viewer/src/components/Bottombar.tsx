@@ -2,6 +2,17 @@ import { createSignal, Show } from 'solid-js';
 
 export default function Bottombar(props) {
   const [showVolume, setShowVolume] = createSignal(false);
+  const [lastVol, setLastVol] = createSignal(1.0);
+
+  function handleVolumeButtonClick() {
+    setShowVolume(!showVolume());
+    if (props.volume() > 0) {
+      setLastVol(props.volume());
+      props.onVolumeChange?.(0);
+    } else {
+      props.onVolumeChange?.(lastVol() || 1.0);
+    }
+  }
 
   return (
     <div class="bottombar">
@@ -42,10 +53,10 @@ export default function Bottombar(props) {
         </div>
 
         <div class="group">
-          <div class="volume-box">
+          <div class="volume">
             <button
               class="btn"
-              onClick={() => setShowVolume(!showVolume())}
+              onClick={handleVolumeButtonClick}
               data-tip="Volume Control"
               aria-label="Volume Control"
             >
@@ -65,20 +76,18 @@ export default function Bottombar(props) {
               </Show>
             </button>
 
-            <Show when={showVolume()}>
-              <div class="volume-pop">
-                <span class="volume-val">{Math.round(props.volume() * 100)}%</span>
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.01"
-                  value={props.volume()}
-                  onInput={(e) => props.onVolumeChange?.(parseFloat(e.target.value))}
-                  aria-label="Volume Slider"
-                />
-              </div>
-            </Show>
+            <div class={`volume-pop ${showVolume() ? 'open' : ''}`}>
+              <span class="volume-val">{Math.round(props.volume() * 100)}%</span>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value={props.volume()}
+                onInput={(e) => props.onVolumeChange?.(parseFloat(e.currentTarget.value))}
+                aria-label="Volume Slider"
+              />
+            </div>
           </div>
 
           <button

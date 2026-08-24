@@ -1286,7 +1286,8 @@ button {
 }
 
 .volume:hover .volume-pop,
-.volume:focus-within .volume-pop {
+.volume:focus-within .volume-pop,
+.volume-pop.open {
   display: flex;
 }
 
