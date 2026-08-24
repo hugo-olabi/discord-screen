@@ -57,25 +57,24 @@ export default function Home() {
   onMount(async () => {
     // Authenticate / fetch user details
     const currentUser = await getCurrentUser();
-    if (currentUser) setUser(currentUser);
+    if (currentUser) setUser(currentUser as any);
 
     // Listen for OAuth session changes
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event) => {
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
         const refreshedUser = await getCurrentUser();
-        if (refreshedUser) setUser(refreshedUser);
+        if (refreshedUser) setUser(refreshedUser as any);
       }
     });
 
-    // Initialize broadcaster engine
     broadcaster = await createBroadcaster({
-      onStateChange: ({ active, type, error, reason }) => {
+      onStatus: ({ active, type, error, reason }: any) => {
         if (type === 'screen') setIsSharing(active);
         if (type === 'camera') setIsCamera(active);
         if (error) showToast(error, true);
         if (reason) showToast(reason);
       },
-    });
+    } as any);
 
     // Check URL parameters for ?token=XYZ123 fallback
     const urlParams = new URLSearchParams(window.location.search);

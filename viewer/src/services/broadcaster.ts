@@ -34,7 +34,7 @@ function fitWithin(w, h) {
  * Audio constraints for screen share capture.
  */
 export function audioConstraints() {
-  const c = {
+  const c: any = {
     echoCancellation: false,
     noiseSuppression: false,
     autoGainControl: false,
@@ -45,8 +45,8 @@ export function audioConstraints() {
   return c;
 }
 
-export function screenOptions({ fps = 30, comSom = false, video } = {}) {
-  const opts = {
+export function screenOptions({ fps = 30, comSom = false, video }: any = {}) {
+  const opts: any = {
     video: video ?? { frameRate: { ideal: fps, max: fps } },
     audio: comSom ? audioConstraints() : false,
   };
@@ -206,7 +206,7 @@ export function createBroadcaster({
     });
   }
 
-  const opcoesCaptura = (over) => screenOptions({ fps, comSom: audio, ...over });
+  const opcoesCaptura = (over?: any) => screenOptions({ fps, comSom: audio, ...over });
 
   function somDeJanelaConfiavel() {
     return Boolean(navigator.mediaDevices.getSupportedConstraints?.().restrictOwnAudio);
@@ -426,10 +426,10 @@ export function createBroadcaster({
     bytes += 18 + data.byteLength;
   }
 
-  async function pickConfig(width, height) {
+  async function pickConfig(width: number, height: number) {
     for (const realtime of [true, false]) {
       for (const candidate of CANDIDATES) {
-        const cfg = { ...candidate, width, height, bitrate, framerate: fps };
+        const cfg: any = { ...candidate, width, height, bitrate, framerate: fps };
         if (realtime) cfg.latencyMode = 'realtime';
         try {
           const { supported } = await VideoEncoder.isConfigSupported(cfg);
@@ -582,7 +582,7 @@ export function createBroadcaster({
     if (ws?.readyState !== WebSocket.OPEN) return;
 
     if (metadata?.decoderConfig) {
-      ws.send(JSON.stringify({ type: 'config', config: serializeConfig(metadata.decoderConfig) }));
+      ws.send(JSON.stringify({ type: 'config', config: extrairMeta(metadata.decoderConfig) }));
     }
 
     const data = new Uint8Array(chunk.byteLength);
@@ -608,9 +608,14 @@ export function createBroadcaster({
     return buf;
   }
 
-  function serializeConfig(dc) {
-    const out = { codec: dc.codec, codedWidth: dc.codedWidth, codedHeight: dc.codedHeight };
-    if (dc.description) {
+  function extrairMeta(encoderConfig: any) {
+    const out: any = {
+      codec: encoderConfig.codec,
+      codedWidth: encoderConfig.width,
+      codedHeight: encoderConfig.height,
+    };
+    if (encoderConfig.description) {
+      const dc = encoderConfig.description;
       const b = new Uint8Array(
         dc.description instanceof ArrayBuffer ? dc.description : dc.description.buffer,
       );
@@ -622,7 +627,7 @@ export function createBroadcaster({
   }
 
   function connect() {
-    return new Promise((resolve, reject) => {
+    return new Promise<void>((resolve, reject) => {
       ws = new WebSocket(wsUrl);
       ws.binaryType = 'arraybuffer';
 
@@ -698,7 +703,7 @@ export function createBroadcaster({
     return fresh;
   }
 
-  function setQuality({ bitrate: nextBitrate, fps: nextFps } = {}) {
+  function setQuality({ bitrate: nextBitrate, fps: nextFps }: { bitrate?: number; fps?: number } = {}) {
     if (nextBitrate) bitrate = nextBitrate;
     if (nextFps) fps = nextFps;
     if (encoder?.state !== 'configured') return;

@@ -3,17 +3,23 @@
  * Decodes video chunks frame-by-frame and renders them onto a high-performance 2D Canvas.
  */
 
-export function createPlayer(canvas, { onError, onSizeChange, onRequestKeyframe } = {}) {
-  const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
+export interface PlayerOptions {
+  onError?: (msg: string) => void;
+  onSizeChange?: (size: { width: number; height: number }) => void;
+  onRequestKeyframe?: () => void;
+}
 
-  let decoder = null;
+export function createPlayer(canvas: HTMLCanvasElement, { onError, onSizeChange, onRequestKeyframe }: PlayerOptions = {}) {
+  const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true }) as CanvasRenderingContext2D;
+
+  let decoder: any = null;
   let needKeyframe = true;
   let lastLagMs = 0;
   let framesDrawn = 0;
   let lastKeyframeRequestTime = 0;
   let virgin = true;
 
-  function start(rawConfig) {
+  function start(rawConfig: any) {
     stop();
 
     if (!window.VideoDecoder) {
@@ -23,14 +29,14 @@ export function createPlayer(canvas, { onError, onSizeChange, onRequestKeyframe 
 
     const config = deserialize(rawConfig);
 
-    decoder = new VideoDecoder({
+    decoder = new (window as any).VideoDecoder({
       output: drawFrame,
-      error: (err) => {
+      error: (err: any) => {
         console.warn('[VideoDecoder error]', err.message);
         needKeyframe = true;
         try {
           if (decoder && decoder.state === 'closed') {
-            decoder = new VideoDecoder({ output: drawFrame, error: () => {} });
+            decoder = new (window as any).VideoDecoder({ output: drawFrame, error: () => {} });
             decoder.configure(config);
           }
         } catch {
@@ -51,7 +57,7 @@ export function createPlayer(canvas, { onError, onSizeChange, onRequestKeyframe 
     return true;
   }
 
-  function feedPacket(arrayBuffer) {
+  function feedPacket(arrayBuffer: ArrayBuffer) {
     if (!decoder || decoder.state !== 'configured') return;
 
     if (arrayBuffer.byteLength < 18) return;
@@ -87,7 +93,7 @@ export function createPlayer(canvas, { onError, onSizeChange, onRequestKeyframe 
     }
   }
 
-  function drawFrame(frame) {
+  function drawFrame(frame: any) {
     if (canvas.width !== frame.displayWidth || canvas.height !== frame.displayHeight) {
       canvas.width = frame.displayWidth;
       canvas.height = frame.displayHeight;
@@ -130,7 +136,7 @@ export function createPlayer(canvas, { onError, onSizeChange, onRequestKeyframe 
   };
 }
 
-function deserialize(raw) {
+function deserialize(raw: any) {
   if (typeof raw === 'string') return JSON.parse(raw);
   return raw;
 }

@@ -24,7 +24,7 @@ const COLCHAO = 0.08;
 // a tela e continuar empilhando só piora — melhor um corte e voltar ao vivo.
 const ATRASO_MAXIMO = COLCHAO * 4;
 
-export function createAudio({ onError, volume = 1 } = {}) {
+export function createAudio({ onError, volume = 1 }: { onError?: (msg: string) => void; volume?: number } = {}) {
   let ctx = null;
   let decoder = null;
   let ganho = null;

@@ -15,7 +15,10 @@
  * imagem durante o redimensionamento.
  */
 
-export function createPlayer(canvas, { onError, onTamanho, onRequestKeyframe } = {}) {
+export function createPlayer(
+  canvas: HTMLCanvasElement,
+  { onError, onTamanho, onRequestKeyframe }: { onError?: (msg: string) => void; onTamanho?: () => void; onRequestKeyframe?: () => void } = {}
+) {
   const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
 
   let decoder = null;
@@ -191,8 +194,8 @@ export function createPlayer(canvas, { onError, onTamanho, onRequestKeyframe } =
   return { start, push, stop, getLag, takeFrameCount, getSizes };
 }
 
-function deserialize(c) {
-  const out = {
+function deserialize(c: any) {
+  const out: any = {
     codec: c.codec || 'vp09.00.10.08',
     optimizeForLatency: true,
   };

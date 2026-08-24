@@ -37,7 +37,13 @@ function queue() {
 }
 
 class FakeTrack {
-  constructor(kind, settings = {}) {
+  kind: string;
+  settings: any;
+  stopped: boolean;
+  listeners: Record<string, any[]>;
+  constraints: any;
+
+  constructor(kind: string, settings = {}) {
     this.kind = kind;
     this.settings = settings;
     this.stopped = false;
@@ -47,13 +53,13 @@ class FakeTrack {
   getSettings() {
     return this.settings;
   }
-  addEventListener(event, listener) {
+  addEventListener(event: string, listener: any) {
     (this.listeners[event] ??= []).push(listener);
   }
-  dispatch(event) {
+  dispatch(event: string) {
     (this.listeners[event] ?? []).forEach((listener) => listener());
   }
-  applyConstraints(constraints) {
+  applyConstraints(constraints: any) {
     this.constraints = constraints;
     return Promise.resolve();
   }
@@ -63,7 +69,10 @@ class FakeTrack {
 }
 
 class FakeStream {
-  constructor(video, audio = null) {
+  video: any[];
+  audio: any[];
+
+  constructor(video: any, audio: any = null) {
     this.video = video ? [video] : [];
     this.audio = audio ? [audio] : [];
   }
@@ -76,7 +85,7 @@ class FakeStream {
   getTracks() {
     return [...this.video, ...this.audio];
   }
-  removeTrack(track) {
+  removeTrack(track: any) {
     this.audio = this.audio.filter((a) => a !== track);
     this.video = this.video.filter((v) => v !== track);
   }
@@ -95,12 +104,19 @@ const frame = (displayWidth = 1280, displayHeight = 720, timestamp = 1000) => ({
 class FakeVideoEncoder {
   static supportedCodecs = ['avc1.42E01E', 'vp8', 'vp09.00.10.08'];
 
-  static isConfigSupported(config) {
+  output: any;
+  error: any;
+  state: string;
+  config: any;
+  encodes: any[];
+  encodeQueueSize: number;
+
+  static isConfigSupported(config: any) {
     const ok = FakeVideoEncoder.supportedCodecs.includes(config.codec);
     return Promise.resolve({ supported: ok, config });
   }
 
-  constructor({ output, error }) {
+  constructor({ output, error }: any) {
     this.output = output;
     this.error = error;
     this.state = 'unconfigured';
@@ -109,19 +125,19 @@ class FakeVideoEncoder {
     this.encodeQueueSize = 0;
   }
 
-  configure(config) {
+  configure(config: any) {
     this.state = 'configured';
     this.config = config;
   }
 
-  encode(frame, opts = {}) {
+  encode(frame: any, opts: any = {}) {
     this.encodes.push({ frame, opts });
     this.output(
       {
         type: opts.keyFrame ? 'key' : 'delta',
         timestamp: frame.timestamp,
         byteLength: 10,
-        copyTo(dst) {
+        copyTo(dst: any) {
           dst.fill(1);
         },
       },
@@ -138,7 +154,12 @@ class FakeWebSocket {
   static OPEN = 1;
   static CLOSED = 3;
 
-  constructor(url) {
+  url: string;
+  readyState: number;
+  sent: any[];
+  listeners: Record<string, any[]>;
+
+  constructor(url: string) {
     this.url = url;
     this.readyState = 0;
     this.sent = [];

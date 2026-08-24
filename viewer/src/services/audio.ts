@@ -2,12 +2,12 @@
  * Audio decoding and playback engine via Web Audio API.
  */
 
-let audioCtx = null;
-let globalGainNode = null;
+let audioCtx: AudioContext | null = null;
+let globalGainNode: GainNode | null = null;
 
 export function getAudioContext() {
   if (!audioCtx) {
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
     if (!AudioContextClass) return null;
 
     audioCtx = new AudioContextClass({ latencyHint: 'interactive' });
@@ -22,35 +22,36 @@ export function getAudioContext() {
   return { ctx: audioCtx, masterGain: globalGainNode };
 }
 
-export function setMasterVolume(level) {
-  const { masterGain } = getAudioContext() || {};
-  if (masterGain) {
-    masterGain.gain.value = Math.max(0, Math.min(1, level));
+export function setMasterVolume(level: number) {
+  const audioInfo = getAudioContext();
+  if (audioInfo?.masterGain) {
+    audioInfo.masterGain.gain.value = Math.max(0, Math.min(1, level));
   }
 }
 
-export function createAudioPlayer({ onStateChange } = {}) {
-  const { ctx, masterGain } = getAudioContext() || {};
-  if (!ctx) {
+export function createAudioPlayer({ onStateChange }: { onStateChange?: (state: any) => void } = {}) {
+  const audioInfo = getAudioContext();
+  if (!audioInfo || !audioInfo.ctx || !audioInfo.masterGain) {
     onStateChange?.({ supported: false, error: 'Web Audio API not supported in this browser' });
     return null;
   }
 
-  let audioDecoder = null;
+  const { ctx, masterGain } = audioInfo;
+  let audioDecoder: AudioDecoder | null = null;
   let nextStartTime = 0;
 
   function initDecoder() {
     if (!window.AudioDecoder) return false;
 
     audioDecoder = new AudioDecoder({
-      output: (audioData) => {
+      output: (audioData: any) => {
         try {
           playAudioData(audioData);
         } finally {
           audioData.close();
         }
       },
-      error: (err) => {
+      error: (err: any) => {
         console.warn('[AudioDecoder error]', err.message);
       },
     });
@@ -68,7 +69,7 @@ export function createAudioPlayer({ onStateChange } = {}) {
     }
   }
 
-  function playAudioData(audioData) {
+  function playAudioData(audioData: any) {
     if (ctx.state === 'suspended') {
       ctx.resume().catch(() => {});
     }
@@ -102,7 +103,7 @@ export function createAudioPlayer({ onStateChange } = {}) {
 
   return {
     supported: decoderSupported,
-    decodePacket(arrayBuffer) {
+    decodePacket(arrayBuffer: ArrayBuffer) {
       if (!audioDecoder || audioDecoder.state !== 'configured') return;
       try {
         const chunk = new EncodedAudioChunk({
