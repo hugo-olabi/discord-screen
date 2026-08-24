@@ -4,14 +4,14 @@
   "private": true,
   "type": "module",
   "workspaces": [
-    "client"
+    "viewer"
   ],
   "scripts": {
-    "dev": "npm -w client run dev",
-    "build": "npm -w client run build && node -e \"import('fs').then(fs => fs.cpSync('client/dist', 'dist', { recursive: true }))\"",
-    "preview": "npm -w client run preview",
+    "dev": "npm -w viewer run dev",
+    "build": "npm -w viewer run build && node -e \"import('fs').then(fs => fs.cpSync('viewer/dist', 'dist', { recursive: true }))\"",
+    "preview": "npm -w viewer run preview",
     "update-discord": "node scripts/update-discord-app.mjs",
-    "stream": ".venv/bin/python native-streamer/stream.py || python3 native-streamer/stream.py",
+    "stream": ".venv/bin/python streamer/stream.py || python3 streamer/stream.py",
     "test": "vitest run",
     "lint": "eslint ."
   },

@@ -1,6 +1,6 @@
 import sys
 import os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'native-streamer')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'streamer')))
 from janelas import listar_janelas
 from ffmpeg import montar_comando_ffmpeg, montar_comando_pipewire_gstreamer
 from ws_client import demux_ivf_header

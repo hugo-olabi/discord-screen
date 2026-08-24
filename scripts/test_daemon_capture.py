@@ -5,7 +5,7 @@ import sys
 import struct
 import traceback
 
-STREAMER_DIR = os.path.abspath("native-streamer")
+STREAMER_DIR = os.path.abspath("streamer")
 if STREAMER_DIR not in sys.path:
     sys.path.insert(0, STREAMER_DIR)
 

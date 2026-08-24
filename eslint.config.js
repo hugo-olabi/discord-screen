@@ -1,11 +1,5 @@
 /**
- * Lint do workspace inteiro, num arquivo só.
- *
- * O projeto roda em dois mundos e o mesmo `.js` significa coisas diferentes em
- * cada um: `server/` e `scripts/` são Node, `client/src/`, `server/public/` e
- * `shared/` são navegador. Sem essa separação o `no-undef` fica inútil — ou
- * acusa `window` no servidor, ou deixa passar `process` no cliente, que é
- * justamente o erro que ele existe para pegar.
+ * StreamRoom ESLint Flat Config.
  */
 import js from '@eslint/js';
 import globals from 'globals';
@@ -13,7 +7,7 @@ import prettier from 'eslint-config-prettier';
 import { defineConfig, globalIgnores } from 'eslint/config';
 
 export default defineConfig([
-  globalIgnores(['dist/**', 'client/dist/**', 'coverage/**', '.cache/**', 'site/**', '**/dist/**']),
+  globalIgnores(['dist/**', 'viewer/dist/**', 'coverage/**', '.cache/**', 'site/**', '**/dist/**']),
 
   js.configs.recommended,
 
@@ -23,8 +17,6 @@ export default defineConfig([
       sourceType: 'module',
     },
     rules: {
-      // Argumento que sobra depois de uma assinatura mudar é resto; o `_` na
-      // frente é como se diz "este eu sei que não uso".
       'no-unused-vars': [
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrors: 'none' },
@@ -38,8 +30,8 @@ export default defineConfig([
       'server/**/*.js',
       'scripts/**/*.mjs',
       'api/**/*.js',
-      'native-streamer/**/*',
-      'client/vite.config.js',
+      'streamer/**/*',
+      'viewer/vite.config.js',
       'vitest.*.js',
     ],
     ignores: ['server/public/**'],
@@ -47,7 +39,7 @@ export default defineConfig([
   },
 
   {
-    files: ['client/src/**/*.js', 'server/public/**/*.js', 'shared/**/*.js'],
+    files: ['viewer/src/**/*.js', 'server/public/**/*.js'],
     languageOptions: { globals: { ...globals.browser, ...globals.worker } },
     rules: {
       'no-unused-vars': 'off',
@@ -55,7 +47,5 @@ export default defineConfig([
     },
   },
 
-  // Por último: desliga o que o Prettier já decide. Duas ferramentas opinando
-  // sobre a mesma vírgula é conflito, não verificação dobrada.
   prettier,
 ]);

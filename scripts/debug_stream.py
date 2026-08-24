@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Script de Teste Automatizado e Diagnóstico de Stream do Discord Screen Streamer.
-Executa diagnósticos de DBus, XDG Portal, PipeWire FD, GStreamer, FFmpeg, gerador de ruído branco e WebSocket.
+Automated Stream Diagnostic Script for StreamRoom Streamer.
+Tests DBus, XDG Portal, PipeWire FD, GStreamer, FFmpeg, synthetic video noise generator, and WebSocket transport.
 """
 import asyncio
 import os
@@ -9,7 +9,7 @@ import sys
 import subprocess
 import time
 
-STREAMER_DIR = os.path.abspath("native-streamer")
+STREAMER_DIR = os.path.abspath("streamer")
 if STREAMER_DIR not in sys.path:
     sys.path.insert(0, STREAMER_DIR)
 
@@ -26,10 +26,9 @@ def log_step(title, ok=True, details=""):
 
 async def run_diagnostics(target_url=None, use_portal=False):
     print("\n============================================================")
-    print("      ⚡ DIAGNÓSTICO E TRANSMISSÃO DE RUÍDO BRANCO DE ALTA VELOCIDADE     ")
+    print("      ⚡ HIGH SPEED STREAM DIAGNOSTICS & TESTING TOOL     ")
     print("============================================================\n")
 
-    # 1. Verificar binários do sistema
     gst_ok = subprocess.run(["which", "gst-launch-1.0"], capture_output=True).returncode == 0
     ffmpeg_ok = subprocess.run(["which", "ffmpeg"], capture_output=True).returncode == 0
 
@@ -37,23 +36,21 @@ async def run_diagnostics(target_url=None, use_portal=False):
     log_step("FFmpeg", ffmpeg_ok)
 
     if not ffmpeg_ok:
-        print("\n❌ ERRO CRÍTICO: FFmpeg ausente no sistema.")
+        print("\n❌ CRITICAL ERROR: FFmpeg missing from system PATH.")
         return False
 
-    # 2. Testar XDG Desktop Portal se solicitado
     node_id, pw_fd = None, None
     if use_portal:
-        print("\n  Solicitando XDG Desktop Portal...")
+        print("\n  Requesting XDG Desktop Portal...")
         node_id, pw_fd = obter_pipewire_fd_e_node(timeout_seconds=10)
 
         if not node_id:
-            log_step("XDG Desktop Portal (ScreenCast)", False, "Nenhum nó PipeWire obtido")
+            log_step("XDG Desktop Portal (ScreenCast)", False, "No PipeWire node obtained")
         else:
             log_step("XDG Desktop Portal (ScreenCast)", True, f"PipeWire Node #{node_id}")
-            log_step("PipeWire File Descriptor (OpenPipeWireRemote)", pw_fd is not None, f"FD #{pw_fd}" if pw_fd is not None else "Sem FD remoto")
+            log_step("PipeWire File Descriptor (OpenPipeWireRemote)", pw_fd is not None, f"FD #{pw_fd}" if pw_fd is not None else "No remote FD")
 
-    # 3. Testar Gerador de Ruído Branco de Mídia (FFmpeg Synthetic White Noise VP9 Stream)
-    print("\n  Iniciando gerador de vídeo sintetizado (Ruído Branco) para teste ultrarrápido...")
+    print("\n  Starting synthetic video generator test...")
     cmd, _ = montar_comando_white_noise(fps=30)
     proc = await asyncio.create_subprocess_exec(
         *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
@@ -62,9 +59,8 @@ async def run_diagnostics(target_url=None, use_portal=False):
     try:
         header = await asyncio.wait_for(proc.stdout.readexactly(32), timeout=3.0)
         config = demux_ivf_header(header)
-        log_step("Leitura de Cabeçalho IVF (32 bytes)", config is not None, f"Codec: {config.get('codec')} ({config.get('codedWidth')}x{config.get('codedHeight')})" if config else "Invalido")
+        log_step("IVF Header Reading (32 bytes)", config is not None, f"Codec: {config.get('codec')} ({config.get('codedWidth')}x{config.get('codedHeight')})" if config else "Invalid")
 
-        # Ler primeiros 10 quadros de ruído branco sintetizado
         quadros = 0
         for _ in range(10):
             f_hdr = await asyncio.wait_for(proc.stdout.readexactly(12), timeout=2.0)
@@ -72,7 +68,7 @@ async def run_diagnostics(target_url=None, use_portal=False):
             await asyncio.wait_for(proc.stdout.readexactly(f_size), timeout=2.0)
             quadros += 1
 
-        log_step("Geração e Decodificação de Quadros VP9 (Ruído Branco)", quadros == 10, f"{quadros} quadros VP9 gerados e empacotados com sucesso!")
+        log_step("VP9 Frame Generation & Packaging", quadros == 10, f"{quadros} VP9 frames generated successfully!")
 
     except Exception as e:
         err_msg = ""
@@ -82,14 +78,14 @@ async def run_diagnostics(target_url=None, use_portal=False):
                 err_msg = err_bytes.decode('utf-8', errors='ignore').strip()
             except Exception:
                 pass
-        log_step("Geração de Mídia (Ruído Branco)", False, f"Falha: {e}\n{err_msg}")
+        log_step("Media Generation Test", False, f"Failed: {e}\n{err_msg}")
     finally:
         try: proc.terminate()
         except Exception: pass
         fechar_sessao_portal_ativa()
 
     print("\n============================================================")
-    print("                 ✅ DIAGNÓSTICO CONCLUÍDO                    ")
+    print("                 ✅ DIAGNOSTICS COMPLETED                    ")
     print("============================================================\n")
     return True
 

@@ -11,8 +11,8 @@ StreamRoom allows users to create virtual rooms to watch real-time broadcasts wi
 ## 🚀 Getting Started
 
 ### 1. Requirements
-- **Node.js**: Version 22 or higher (for web client UI).
-- **FFmpeg**: Required only on the broadcasting machine for the Python Native Streamer.
+- **Node.js**: Version 22 or higher (for viewer web app UI).
+- **FFmpeg**: Required only on the broadcasting machine for the Python Streamer.
 
 ### 2. Dependency Installation
 ```bash
@@ -25,24 +25,24 @@ npm install
 
 | Command | Description |
 |---|---|
-| `npm run dev` | Launches the SolidJS Vite development server for the web interface. |
-| `npm run build` | Compiles the client application for production (generates static files in `dist/`). |
-| `npm run stream` | Launches the Python Native Streamer (GTK4 UI / CLI) for hardware-accelerated broadcast. |
+| `npm run dev` | Launches the SolidJS Vite development server for the viewer interface. |
+| `npm run build` | Compiles the viewer application for production (generates static files in `dist/`). |
+| `npm run stream` | Launches the Python Streamer (GTK4 UI / CLI) for hardware-accelerated broadcast. |
 | `npm run update-discord` | Updates activity URL mappings in Discord Developer Portal (optional). |
 | `npm test` | Runs unit test suite (Vitest). |
 | `npm run lint` | Runs code linter check (ESLint). |
 
 ---
 
-## 🖥️ Python Native Streamer
+## 🖥️ Streamer (Python Hardware Streamer)
 
-To stream at high framerates (60 FPS) and high resolutions without overloading the browser, use the standalone native streamer:
+To stream at high framerates (60 FPS) and high resolutions without overloading the browser, use the standalone streamer:
 
 ```bash
 npm run stream
 ```
 
-### Native Streamer Features:
+### Streamer Features:
 - GTK4 graphical interface for window/screen and audio source selection.
 - GPU acceleration support (`NVENC`, `VAAPI`, `QSV`).
 - System audio capture via PipeWire / PulseAudio.

@@ -1,6 +1,6 @@
-# StreamRoom Native Streamer (Python & FFmpeg)
+# StreamRoom Streamer (Python & FFmpeg)
 
-StreamRoom includes a standalone native streamer written in Python (GTK4 / CLI) utilizing **FFmpeg** and **GStreamer** to capture and stream desktop screens and system audio directly with zero browser overhead.
+StreamRoom includes a standalone streamer written in Python (GTK4 / CLI) utilizing **FFmpeg** and **GStreamer** to capture and stream desktop screens and system audio directly with zero browser overhead.
 
 ---
 
