@@ -35,6 +35,7 @@ export async function fetchRoomByToken(token: string) {
     password: data.password || null,
     locked: Boolean(data.password),
     status: data.status || 'live',
+    tunnelUrl: data.tunnel_url || null,
   };
 }
 

@@ -23,6 +23,7 @@ export default function StreamTile(props) {
       if (props.stream.config) {
         player.start(props.stream.config);
       }
+      props.stream.onPlayerReady?.(player);
     }
   });
 

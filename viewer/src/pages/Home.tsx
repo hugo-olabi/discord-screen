@@ -16,6 +16,8 @@ import { supabase, fetchRoomByToken, createRoomRecord, cleanupInactiveRooms } fr
 import { createBroadcaster } from '../services/broadcaster.js';
 import { getCurrentUser, loginWithDiscord, logoutDiscord, generateShortToken } from '../services/auth.js';
 
+import { createAudio } from '../audio.js';
+
 export default function Home() {
   const params = useParams();
   const navigate = useNavigate();
@@ -46,6 +48,10 @@ export default function Home() {
   let activeRealtimeChannel = null;
   let cleanupInterval = null;
 
+  let activeWs = null;
+  let activeVideoPlayer = null;
+  let activeAudioPlayer = null;
+
   function showToast(msg, isErr = false) {
     setToastMessage(msg);
     setToastIsError(isErr);
@@ -53,6 +59,105 @@ export default function Home() {
       setToastMessage('');
     }, 4000);
   }
+
+  function connectToStream(targetRoom) {
+    if (activeWs) {
+      activeWs.close();
+      activeWs = null;
+    }
+    if (activeAudioPlayer) {
+      activeAudioPlayer.stop();
+      activeAudioPlayer = null;
+    }
+    activeVideoPlayer = null;
+    setStreams([]);
+
+    if (!targetRoom) return;
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const hasLocalParam = urlParams.has('local');
+
+    let wsUrl = targetRoom.tunnelUrl || null;
+    const isLocalUrl = Boolean(wsUrl && (wsUrl.includes('127.0.0.1') || wsUrl.includes('localhost')));
+
+    if (isLocalUrl || !wsUrl) {
+      if (!hasLocalParam) {
+        if (wsUrl || targetRoom.status === 'live') {
+          showToast('Local fallback disabled. Add ?local to URL parameter to connect.', true);
+        }
+        return;
+      }
+      wsUrl = wsUrl || 'ws://127.0.0.1:3001/ws';
+    }
+
+    try {
+      const ws = new WebSocket(wsUrl);
+      ws.binaryType = 'arraybuffer';
+      activeWs = ws;
+
+      ws.onopen = () => {
+        showToast('Connected to live stream!');
+      };
+
+      ws.onmessage = (event) => {
+        if (typeof event.data === 'string') {
+          try {
+            const msg = JSON.parse(event.data);
+            if (msg.type === 'config') {
+              const streamItem = {
+                id: targetRoom.id,
+                ownerName: targetRoom.owner || 'Streamer',
+                config: msg.config,
+                onPlayerReady: (playerEngine) => {
+                  activeVideoPlayer = playerEngine;
+                },
+              };
+              setStreams([streamItem]);
+            } else if (msg.type === 'audio-config') {
+              if (!activeAudioPlayer) {
+                activeAudioPlayer = createAudio({
+                  onError: (err) => console.warn('[Audio Error]', err),
+                  volume: volume(),
+                });
+                activeAudioPlayer.start(msg.config);
+              }
+            }
+          } catch {
+            /* ignore json parse error */
+          }
+        } else if (event.data instanceof ArrayBuffer) {
+          const view = new DataView(event.data);
+          if (event.data.byteLength >= 2) {
+            const tipo = view.getUint8(1);
+            if (tipo === 1 || tipo === 0) {
+              activeVideoPlayer?.feedPacket?.(event.data);
+              activeVideoPlayer?.push?.(event.data);
+            } else if (tipo === 3) {
+              activeAudioPlayer?.push?.(event.data);
+            }
+          }
+        }
+      };
+
+      ws.onerror = (err) => {
+        console.warn('[Stream WebSocket error]', err);
+      };
+
+      ws.onclose = () => {
+        if (activeWs === ws) {
+          activeWs = null;
+        }
+      };
+    } catch (err) {
+      showToast(`Stream connection failed: ${err.message}`, true);
+    }
+  }
+
+  createEffect(() => {
+    if (activeAudioPlayer) {
+      activeAudioPlayer.setVolume(volume());
+    }
+  });
 
   onMount(async () => {
     // Authenticate / fetch user details
@@ -95,6 +200,7 @@ export default function Home() {
   });
 
   onCleanup(() => {
+    connectToStream(null);
     if (broadcaster) broadcaster.stop();
     if (activeRealtimeChannel) supabase.removeChannel(activeRealtimeChannel);
     if (cleanupInterval) clearInterval(cleanupInterval);
@@ -156,6 +262,8 @@ export default function Home() {
       navigate(`/room/${roomToken}`, { replace: true });
     }
 
+    connectToStream(room);
+
     // Subscribe to realtime changes for this room
     if (activeRealtimeChannel) supabase.removeChannel(activeRealtimeChannel);
     activeRealtimeChannel = supabase
@@ -164,12 +272,23 @@ export default function Home() {
         if (payload.eventType === 'DELETE') {
           handleLeaveRoom();
           showToast('Stream closed by host');
+        } else if (payload.eventType === 'UPDATE' && payload.new) {
+          const updatedRoom = {
+            ...activeRoom(),
+            tunnelUrl: payload.new.tunnel_url || null,
+            status: payload.new.status || 'live',
+          };
+          setActiveRoom(updatedRoom);
+          if (payload.new.tunnel_url && (!activeWs || activeWs.url !== payload.new.tunnel_url)) {
+            connectToStream(updatedRoom);
+          }
         }
       })
       .subscribe();
   }
 
   function handleLeaveRoom() {
+    connectToStream(null);
     if (broadcaster) broadcaster.stop();
     setIsSharing(false);
     setIsCamera(false);
