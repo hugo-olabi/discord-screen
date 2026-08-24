@@ -1,7 +1,7 @@
 import { DiscordSDK } from '@discord/embedded-app-sdk';
 import { supabase } from './supabase.js';
+import { DISCORD_CLIENT_ID } from '../constants/discord.js';
 
-const DISCORD_CLIENT_ID = '1540065649181724722';
 let discordSdkInstance: DiscordSDK | null = null;
 
 /**
