@@ -88,12 +88,6 @@ export default function TermsOfService() {
               updates constitutes your acceptance of the revised terms.
             </p>
           </section>
-
-          <footer class="legal-footer">
-            <A href="/privacy-policy" class="legal-nav-link">Privacy Policy</A>
-            <span class="dot-sep">•</span>
-            <A href="/" class="legal-nav-link">StreamRoom Home</A>
-          </footer>
         </article>
       </main>
     </div>

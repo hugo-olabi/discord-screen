@@ -1490,7 +1490,7 @@ button {
 
 .legal-container {
   flex: 1;
-  max-height: calc(100% - 50px);
+  max-height: calc(100% - 56px);
   max-width: 800px;
   width: 100%;
   margin: 0 auto;
@@ -1651,10 +1651,11 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: #5865f2;
+  background: #5865f226;
   color: #ffffff;
-  border: none;
-  padding: 6px 14px;
+  border: 1px solid rgba(88, 101, 242, .3);
+  height:34px;
+  padding: 0 10px;
   border-radius: 999px;
   font-weight: 600;
   font-size: 13px;
@@ -1664,7 +1665,7 @@ button {
 
 .topbar-login-btn:hover {
   background: #4752c4;
-  transform: translateY(-1px);
+  border: 1px solid #4752c411;
 }
 
 .lobby-footer {

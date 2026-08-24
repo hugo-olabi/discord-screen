@@ -103,12 +103,6 @@ export default function PrivacyPolicy() {
               repository issue tracker or project support channels.
             </p>
           </section>
-
-          <footer class="legal-footer">
-            <A href="/terms-of-service" class="legal-nav-link">Terms of Service</A>
-            <span class="dot-sep">•</span>
-            <A href="/" class="legal-nav-link">StreamRoom Home</A>
-          </footer>
         </article>
       </main>
     </div>

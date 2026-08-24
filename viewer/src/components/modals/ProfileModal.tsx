@@ -13,7 +13,7 @@ export default function ProfileModal(props: any) {
                 when={props.user()?.avatar}
                 fallback={<div class="avatar-fallback lg">{props.user()?.name?.[0] || 'U'}</div>}
               >
-                <img src={props.user()?.avatar} alt="Avatar" />
+                <img width={10} src={props.user()?.avatar} alt="Avatar" />
               </Show>
             </div>
             <div class="profile-meta">
