@@ -1,4 +1,82 @@
+import { DiscordSDK } from '@discord/embedded-app-sdk';
 import { supabase } from './supabase.js';
+
+const DISCORD_CLIENT_ID = '1540065649181724722';
+let discordSdkInstance: DiscordSDK | null = null;
+
+/**
+ * Detects if StreamRoom is running as a Discord Activity (Embedded App inside Discord iframe).
+ */
+export function isDiscordActivity(): boolean {
+  if (typeof window === 'undefined') return false;
+  const params = new URLSearchParams(window.location.search);
+  const isIframe = window.self !== window.top;
+  const hasDiscordParams =
+    params.has('frame_id') ||
+    params.has('instance_id') ||
+    params.has('channel_id') ||
+    params.has('guild_id');
+  const isDiscordNative = Boolean((window as any).DiscordNative);
+
+  return isIframe || hasDiscordParams || isDiscordNative;
+}
+
+/**
+ * Initializes Discord Embedded App SDK and automatically logs in the Discord user
+ * when running inside a Discord Activity.
+ */
+export async function initDiscordActivity() {
+  if (!isDiscordActivity()) return null;
+
+  try {
+    if (!discordSdkInstance) {
+      discordSdkInstance = new DiscordSDK(DISCORD_CLIENT_ID);
+    }
+
+    await discordSdkInstance.ready();
+
+    // Authorize with Discord Embedded App SDK
+    const { code } = await discordSdkInstance.commands.authorize({
+      client_id: DISCORD_CLIENT_ID,
+      response_type: 'code',
+      state: '',
+      prompt: 'none',
+      scope: ['identify', 'guilds'],
+    });
+
+    // Authenticate to get user details
+    const auth = await discordSdkInstance.commands.authenticate({ access_token: code });
+    if (auth?.user) {
+      const user = {
+        id: auth.user.id,
+        name: auth.user.global_name || auth.user.username || 'Discord User',
+        avatar: auth.user.avatar
+          ? `https://cdn.discordapp.com/avatars/${auth.user.id}/${auth.user.avatar}.png`
+          : null,
+        isDiscord: true,
+        isActivity: true,
+      };
+      localStorage.setItem('streamroom_discord_user', JSON.stringify(user));
+      return user;
+    }
+  } catch (err) {
+    console.warn('[Discord Activity Auth Warning]', err);
+    const cached = localStorage.getItem('streamroom_discord_user');
+    if (cached) {
+      try {
+        return JSON.parse(cached);
+      } catch {}
+    }
+  }
+
+  return {
+    id: 'discord-activity-user',
+    name: 'Discord Member',
+    avatar: null,
+    isDiscord: true,
+    isActivity: true,
+  };
+}
 
 export function generateShortToken(length = 6) {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
@@ -42,9 +120,18 @@ export async function loginWithDiscord() {
 
 export async function logoutDiscord() {
   await supabase.auth.signOut();
+  localStorage.removeItem('streamroom_discord_user');
 }
 
 export async function getCurrentUser() {
+  // If running inside Discord Activity, auto-login with Discord Activity user
+  if (isDiscordActivity()) {
+    const activityUser = await initDiscordActivity();
+    if (activityUser) {
+      return activityUser;
+    }
+  }
+
   try {
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.user) {
@@ -54,6 +141,7 @@ export async function getCurrentUser() {
         name: user.user_metadata?.full_name || user.user_metadata?.custom_claims?.global_name || user.email?.split('@')[0] || 'Discord User',
         avatar: user.user_metadata?.avatar_url || user.user_metadata?.picture || null,
         isDiscord: true,
+        isActivity: false,
       };
     }
   } catch {
@@ -69,5 +157,6 @@ export async function getCurrentUser() {
     name: savedName || 'Guest User',
     avatar: null,
     isDiscord: false,
+    isActivity: false,
   };
 }

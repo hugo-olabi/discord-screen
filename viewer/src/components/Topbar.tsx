@@ -1,8 +1,11 @@
 import { Show } from 'solid-js';
 import { A, useLocation } from '@solidjs/router';
+import { isDiscordActivity } from '../services/auth.js';
 
 export default function Topbar(props: any) {
   const location = useLocation();
+
+  const isActivity = () => isDiscordActivity() || Boolean(props.user?.()?.isActivity);
 
   return (
     <header class="topbar">
@@ -31,7 +34,7 @@ export default function Topbar(props: any) {
 
       <div class="topbar-right">
         <nav class="nav-links">
-          <Show when={location.pathname !== '/discord'}>
+          <Show when={location.pathname !== '/discord' && !isActivity()}>
             <A
               href="/discord"
               class="topbar-link discord-install-link"
