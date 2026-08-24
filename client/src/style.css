@@ -1435,122 +1435,125 @@ button {
 
 /* ----------------------------------------------------------- legal pages */
 
+/* ----------------------------------------------------------- legal pages */
+
 .legal-page {
   min-height: 100vh;
-  background: radial-gradient(circle at top, #18191c 0%, #090a0c 100%);
+  background: #0e0f12;
   color: var(--text);
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  font-family: inherit;
 }
 
 .legal-header {
-  height: 64px;
+  height: 56px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(12px);
-  background: rgba(18, 19, 22, 0.7);
+  background: rgba(18, 19, 23, 0.8);
   position: sticky;
   top: 0;
   z-index: 20;
 }
 
 .legal-header-content {
-  max-width: 900px;
+  max-width: 800px;
   margin: 0 auto;
   height: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 24px;
+  padding: 0 20px;
 }
 
 .back-link {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: var(--muted);
+  color: #949ba4;
   text-decoration: none;
-  font-weight: 500;
-  font-size: 14px;
+  font-weight: 600;
+  font-size: 13.5px;
   transition: color 0.15s ease;
 }
 
 .back-link:hover {
-  color: var(--text);
+  color: #ffffff;
 }
 
 .brand-logo {
   font-weight: 700;
-  font-size: 18px;
+  font-size: 16px;
   letter-spacing: -0.02em;
-  background: linear-gradient(135deg, #7289da 0%, #5865f2 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: #ffffff;
 }
 
 .legal-container {
   flex: 1;
-  max-width: 900px;
+  max-width: 800px;
   width: 100%;
   margin: 0 auto;
-  padding: 40px 24px 80px;
+  padding: 32px 20px 60px;
 }
 
 .legal-card {
-  background: rgba(30, 31, 34, 0.75);
+  background: rgba(22, 23, 27, 0.7);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 16px;
-  padding: 48px;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(20px);
+  padding: 36px 32px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(16px);
 }
 
 .legal-title {
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 700;
-  margin: 0 0 8px 0;
+  margin: 0 0 6px 0;
+  color: #ffffff;
   letter-spacing: -0.02em;
 }
 
 .legal-updated {
-  color: var(--muted);
-  font-size: 13.5px;
-  margin-bottom: 36px;
+  color: #949ba4;
+  font-size: 13px;
+  margin-bottom: 28px;
 }
 
 .legal-section {
-  margin-bottom: 36px;
+  margin-bottom: 28px;
 }
 
 .legal-section h2 {
-  font-size: 19px;
+  font-size: 17px;
   font-weight: 600;
-  margin: 0 0 12px 0;
-  color: #fff;
+  margin: 0 0 10px 0;
+  color: #ffffff;
   letter-spacing: -0.01em;
 }
 
 .legal-section p {
   color: #dbdee1;
-  line-height: 1.65;
-  margin: 0 0 12px 0;
-  font-size: 14.5px;
+  line-height: 1.6;
+  margin: 0 0 10px 0;
+  font-size: 14px;
 }
 
 .legal-section ul {
-  margin: 8px 0 16px 20px;
+  margin: 8px 0 14px 20px;
   padding: 0;
   color: #dbdee1;
 }
 
 .legal-section li {
-  margin-bottom: 8px;
-  line-height: 1.6;
+  margin-bottom: 6px;
+  line-height: 1.55;
+  font-size: 14px;
 }
 
 .legal-footer {
-  margin-top: 48px;
-  padding-top: 24px;
+  margin-top: 36px;
+  padding-top: 20px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   align-items: center;
@@ -1559,10 +1562,10 @@ button {
 }
 
 .legal-nav-link {
-  color: var(--accent);
+  color: #5865f2;
   text-decoration: none;
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 13.5px;
+  font-weight: 600;
 }
 
 .legal-nav-link:hover {
@@ -1570,7 +1573,7 @@ button {
 }
 
 .dot-sep {
-  color: var(--muted);
+  color: #949ba4;
 }
 
 /* ------------------------------------------------ topbar & navigation styles */
@@ -1590,7 +1593,7 @@ button {
   align-items: center;
   gap: 8px;
   text-decoration: none;
-  color: var(--text);
+  color: #ffffff;
   font-weight: 700;
   font-size: 16px;
 }
@@ -1697,12 +1700,14 @@ button {
   padding: 24px 16px;
   background: transparent;
   overflow: hidden;
-  height: 100%;
+  height: calc(100vh - 56px);
+  width: 100%;
 }
 
 .token-card {
   max-width: 440px;
   width: 100%;
+  margin: auto;
   background: rgba(26, 27, 32, 0.7);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 16px;
@@ -1736,9 +1741,7 @@ button {
   font-weight: 700;
   margin: 0;
   letter-spacing: -0.02em;
-  background: linear-gradient(135deg, #7289da 0%, #5865f2 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: #ffffff;
 }
 
 .token-card-sub {
