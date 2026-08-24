@@ -227,6 +227,7 @@ class RecordingSetupModal(Gtk.Window):
             "profile": profile,
             "audio_source": audio_type,
             "stream_audio": audio_type != "none"
+        }
         self.close()
         self.on_confirm_callback(config)
 
