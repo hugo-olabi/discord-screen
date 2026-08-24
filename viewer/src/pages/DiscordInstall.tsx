@@ -1,14 +1,18 @@
-import { onMount } from 'solid-js';
+import { createSignal, onMount } from 'solid-js';
 import Topbar from '../components/Topbar';
-import { isDiscordActivity } from '../services/auth';
+import { isDiscordActivity, getCurrentUser } from '../services/auth';
 
 const DISCORD_CLIENT_ID = '1540065649181724722';
 const DISCORD_INSTALL_URL = `https://discord.com/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&scope=applications.commands+identify`;
 
 export default function DiscordInstall() {
+  const [user, setUser] = createSignal<any>(null);
   const inActivity = isDiscordActivity();
 
-  onMount(() => {
+  onMount(async () => {
+    const currentUser = await getCurrentUser();
+    if (currentUser) setUser(currentUser);
+
     // Only redirect if NOT running inside Discord Activity iframe
     if (!inActivity) {
       window.location.href = DISCORD_INSTALL_URL;
@@ -20,7 +24,7 @@ export default function DiscordInstall() {
       <Topbar
         participantsCount={() => 0}
         roomName={() => ''}
-        user={() => null}
+        user={user}
         onOpenProfile={() => {}}
       />
 

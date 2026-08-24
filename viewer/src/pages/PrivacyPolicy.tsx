@@ -1,15 +1,23 @@
+import { createSignal, onMount } from 'solid-js';
 import { A } from '@solidjs/router';
 import Topbar from '../components/Topbar';
+import { getCurrentUser } from '../services/auth';
 
 export default function PrivacyPolicy() {
-  return (
+  const [user, setUser] = createSignal<any>(null);
 
+  onMount(async () => {
+    const currentUser = await getCurrentUser();
+    if (currentUser) setUser(currentUser);
+  });
+
+  return (
     <div class="legal-page">
       <Topbar
-        participantsCount={()=>0}
-        roomName={() => ""}
-        user={() => null}
-        onOpenProfile={() => console.log(true)}
+        participantsCount={() => 0}
+        roomName={() => ''}
+        user={user}
+        onOpenProfile={() => {}}
       />
 
       <main class="legal-container">

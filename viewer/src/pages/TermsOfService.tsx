@@ -1,13 +1,22 @@
+import { createSignal, onMount } from 'solid-js';
 import { A } from '@solidjs/router';
 import Topbar from '../components/Topbar';
+import { getCurrentUser } from '../services/auth';
 
 export default function TermsOfService() {
+  const [user, setUser] = createSignal<any>(null);
+
+  onMount(async () => {
+    const currentUser = await getCurrentUser();
+    if (currentUser) setUser(currentUser);
+  });
+
   return (
     <div class="legal-page">
       <Topbar
         participantsCount={() => 0}
         roomName={() => ''}
-        user={() => null}
+        user={user}
         onOpenProfile={() => {}}
       />
 

@@ -28,6 +28,20 @@ export function isDiscordActivity(): boolean {
 export async function initDiscordActivity() {
   if (!isDiscordActivity()) return null;
 
+  // 1. Fast path: return cached Discord Activity user if already authenticated
+  const cached =
+    localStorage.getItem('streamroom_discord_user') ||
+    localStorage.getItem('streamroom_logged_user');
+  if (cached) {
+    try {
+      const parsed = JSON.parse(cached);
+      if (parsed && parsed.isDiscord) {
+        return parsed;
+      }
+    } catch {}
+  }
+
+  // 2. Authenticate via Discord Embedded App SDK
   try {
     if (!discordSdkInstance) {
       discordSdkInstance = new DiscordSDK(DISCORD_CLIENT_ID);
@@ -62,21 +76,19 @@ export async function initDiscordActivity() {
     }
   } catch (err) {
     console.warn('[Discord Activity Auth Warning]', err);
-    const cached = localStorage.getItem('streamroom_discord_user') || localStorage.getItem('streamroom_logged_user');
-    if (cached) {
-      try {
-        return JSON.parse(cached);
-      } catch {}
-    }
   }
 
-  return {
+  // 3. Fallback Activity user (never log out in activity)
+  const fallbackUser = {
     id: 'discord-activity-user',
     name: 'Discord Member',
     avatar: null,
     isDiscord: true,
     isActivity: true,
   };
+  localStorage.setItem('streamroom_discord_user', JSON.stringify(fallbackUser));
+  localStorage.setItem('streamroom_logged_user', JSON.stringify(fallbackUser));
+  return fallbackUser;
 }
 
 export function generateShortToken(length = 6) {
@@ -134,7 +146,6 @@ export async function getCurrentUser() {
   if (isDiscordActivity()) {
     const activityUser = await initDiscordActivity();
     if (activityUser) {
-      localStorage.setItem('streamroom_logged_user', JSON.stringify(activityUser));
       return activityUser;
     }
   }
