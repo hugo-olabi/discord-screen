@@ -19,6 +19,9 @@ export function createPlayer(canvas: HTMLCanvasElement, { onError, onSizeChange,
   let lastKeyframeRequestTime = 0;
   let virgin = true;
 
+  let latestFrame: any = null;
+  let animFrameId: number | null = null;
+
   function start(rawConfig: any) {
     stop();
 
@@ -63,7 +66,8 @@ export function createPlayer(canvas: HTMLCanvasElement, { onError, onSizeChange,
     if (arrayBuffer.byteLength < 18) return;
 
     const view = new DataView(arrayBuffer);
-    const type = view.getUint8(1); // 1 = keyframe, 2 = delta
+    const type = view.getUint8(1); // 1 = keyframe, 0/2 = delta
+    const timestamp = view.getFloat64(2); // Sent timestamp in us
     const sendTimestamp = view.getFloat64(10); // Sent timestamp in ms
 
     const isKeyframe = type === 1;
@@ -81,7 +85,7 @@ export function createPlayer(canvas: HTMLCanvasElement, { onError, onSizeChange,
     try {
       const chunk = new EncodedVideoChunk({
         type: isKeyframe ? 'key' : 'delta',
-        timestamp: performance.now() * 1000,
+        timestamp: Math.max(0, Math.round(timestamp)),
         data: payload,
       });
 
@@ -93,19 +97,36 @@ export function createPlayer(canvas: HTMLCanvasElement, { onError, onSizeChange,
     }
   }
 
-  function drawFrame(frame: any) {
+  function renderLoop() {
+    animFrameId = requestAnimationFrame(renderLoop);
+    if (!latestFrame) return;
+
+    const frame = latestFrame;
+    latestFrame = null;
+
     if (canvas.width !== frame.displayWidth || canvas.height !== frame.displayHeight) {
       canvas.width = frame.displayWidth;
       canvas.height = frame.displayHeight;
       onSizeChange?.({ width: frame.displayWidth, height: frame.displayHeight });
     }
 
-    ctx.drawImage(frame, 0, 0);
+    ctx.drawImage(frame, 0, 0, canvas.width, canvas.height);
     frame.close();
     framesDrawn++;
 
     if (virgin) {
       virgin = false;
+    }
+  }
+
+  function drawFrame(frame: any) {
+    if (latestFrame) {
+      latestFrame.close();
+    }
+    latestFrame = frame;
+
+    if (!animFrameId) {
+      animFrameId = requestAnimationFrame(renderLoop);
     }
   }
 
@@ -118,6 +139,15 @@ export function createPlayer(canvas: HTMLCanvasElement, { onError, onSizeChange,
   }
 
   function stop() {
+    if (animFrameId) {
+      cancelAnimationFrame(animFrameId);
+      animFrameId = null;
+    }
+    if (latestFrame) {
+      try { latestFrame.close(); } catch {}
+      latestFrame = null;
+    }
+
     if (decoder) {
       try {
         if (decoder.state !== 'closed') decoder.close();
@@ -131,6 +161,7 @@ export function createPlayer(canvas: HTMLCanvasElement, { onError, onSizeChange,
   return {
     start,
     feedPacket,
+    push: feedPacket,
     stop,
     getStats: () => ({ framesDrawn, lastLagMs, isVirgin: virgin }),
   };

@@ -99,17 +99,26 @@ export default function Home() {
         showToast('Connected to live stream!');
       };
 
+      let videoPacketBuffer: ArrayBuffer[] = [];
+
       ws.onmessage = (event) => {
         if (typeof event.data === 'string') {
           try {
             const msg = JSON.parse(event.data);
             if (msg.type === 'config') {
+              videoPacketBuffer = [];
               const streamItem = {
                 id: targetRoom.id,
                 ownerName: targetRoom.owner || 'Streamer',
                 config: msg.config,
                 onPlayerReady: (playerEngine) => {
                   activeVideoPlayer = playerEngine;
+                  while (videoPacketBuffer.length > 0) {
+                    const pkt = videoPacketBuffer.shift();
+                    if (pkt) {
+                      playerEngine.feedPacket?.(pkt) || playerEngine.push?.(pkt);
+                    }
+                  }
                 },
               };
               setStreams([streamItem]);
@@ -130,8 +139,13 @@ export default function Home() {
           if (event.data.byteLength >= 2) {
             const tipo = view.getUint8(1);
             if (tipo === 1 || tipo === 0) {
-              activeVideoPlayer?.feedPacket?.(event.data);
-              activeVideoPlayer?.push?.(event.data);
+              if (activeVideoPlayer) {
+                if (activeVideoPlayer.feedPacket) activeVideoPlayer.feedPacket(event.data);
+                else if (activeVideoPlayer.push) activeVideoPlayer.push(event.data);
+              } else {
+                videoPacketBuffer.push(event.data);
+                if (videoPacketBuffer.length > 60) videoPacketBuffer.shift();
+              }
             } else if (tipo === 3) {
               activeAudioPlayer?.push?.(event.data);
             }
