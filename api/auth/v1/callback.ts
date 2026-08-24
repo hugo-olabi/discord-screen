@@ -2,7 +2,7 @@
  * Vercel Serverless Function to proxy OAuth callback from https://streamroom.vercel.app/auth/v1/callback
  * to Supabase Auth's native callback endpoint with proper Host headers.
  */
-export default async function handler(req, res) {
+export default async function handler(req: any, res: any) {
   const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://elpfsixxbdnvwxhundxl.supabase.co';
   const targetUrl = new URL('/auth/v1/callback', supabaseUrl);
 
