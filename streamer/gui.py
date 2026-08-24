@@ -99,13 +99,9 @@ class RecordingSetupModal(Gtk.Window):
         audio_box.set_halign(Gtk.Align.CENTER)
         
         audio_label = Gtk.Label(label="Audio Source:")
-        self.audio_dropdown = Gtk.DropDown.new_from_strings([
-            "System Audio (Desktop)",
-            "App Audio (Selected Window)",
-            "Microphone",
-            "Disabled (No Audio)"
-        ])
-        self.audio_dropdown.set_selected(0)
+        self.audio_options_map = []
+        self.audio_dropdown = Gtk.DropDown()
+        self.populate_audio_dropdown()
 
         audio_box.append(audio_label)
         audio_box.append(self.audio_dropdown)
@@ -133,6 +129,38 @@ class RecordingSetupModal(Gtk.Window):
         self.stream_btn.connect("clicked", self.on_stream_clicked)
         main_box.append(self.stream_btn)
 
+    def populate_audio_dropdown(self, selected_app_name=None):
+        options_map = [
+            ("System Audio (System Default)", "system", None)
+        ]
+
+        added_names = set()
+
+        if selected_app_name and selected_app_name not in ["N/A", "No source selected"]:
+            clean_name = selected_app_name.split("Node #")[-1] if "PipeWire Node" in selected_app_name else selected_app_name
+            options_map.append((f"App Audio ({clean_name})", "app", clean_name))
+            added_names.add(clean_name.lower())
+
+        janelas = listar_janelas()
+        for j in janelas:
+            title = j.get("title", "").strip()
+            if title and title.lower() not in added_names:
+                added_names.add(title.lower())
+                options_map.append((f"App Audio: {title}", "app", title))
+
+        if len(options_map) == 1:
+            options_map.append(("App Audio (Selected Window)", "app", None))
+
+        options_map.append(("Microphone", "mic", None))
+        options_map.append(("Disabled (No Audio)", "none", None))
+
+        self.audio_options_map = options_map
+        display_strings = [opt[0] for opt in options_map]
+
+        model = Gtk.StringList.new(display_strings)
+        self.audio_dropdown.set_model(model)
+        self.audio_dropdown.set_selected(0)
+
     def on_select_source_clicked(self, btn):
         self.source_label.set_text("Requesting OS Desktop Portal...")
         
@@ -156,6 +184,7 @@ class RecordingSetupModal(Gtk.Window):
                     self.selected_window_id = None
                     self.selected_source_name = f"PipeWire Node #{node}"
                     self.source_label.set_text(f"{'Screen' if is_screen else 'Window'}: Node #{node}")
+                    self.populate_audio_dropdown(self.selected_source_name)
                     self.stream_btn.set_sensitive(True)
                 else:
                     # Fallback to listing windows
@@ -167,6 +196,7 @@ class RecordingSetupModal(Gtk.Window):
                         self.selected_window_id = janelas[0]["id"]
                         self.selected_source_name = janelas[0]["title"]
                         self.source_label.set_text(f"Selected Window: {self.selected_source_name}")
+                        self.populate_audio_dropdown(self.selected_source_name)
                         self.stream_btn.set_sensitive(True)
                     else:
                         self.source_label.set_text("No source selected (Portal cancelled)")
@@ -177,8 +207,13 @@ class RecordingSetupModal(Gtk.Window):
 
     def on_stream_clicked(self, btn):
         fps = 60 if self.fps_60.get_active() else (15 if self.fps_15.get_active() else 30)
-        audio_map = {0: "system", 1: "app", 2: "mic", 3: "none"}
-        audio_source = audio_map.get(self.audio_dropdown.get_selected(), "system")
+
+        sel_idx = self.audio_dropdown.get_selected()
+        if sel_idx < len(self.audio_options_map):
+            _, audio_type, target_app = self.audio_options_map[sel_idx]
+        else:
+            audio_type, target_app = "system", None
+
         profile_map = {0: "cinema", 1: "mobile", 2: "balanced", 3: "fast"}
         profile = profile_map.get(self.profile_dropdown.get_selected(), "cinema")
 
@@ -187,13 +222,11 @@ class RecordingSetupModal(Gtk.Window):
             "pipewire_fd": self.pipewire_fd,
             "is_screen": getattr(self, "is_screen", True),
             "window_id": self.selected_window_id,
-            "source_name": self.selected_source_name,
+            "source_name": target_app or self.selected_source_name,
             "fps": fps,
             "profile": profile,
-            "audio_source": audio_source,
-            "stream_audio": audio_source != "none"
-        }
-
+            "audio_source": audio_type,
+            "stream_audio": audio_type != "none"
         self.close()
         self.on_confirm_callback(config)
 
