@@ -1,7 +1,7 @@
 import { createSignal, onMount } from 'solid-js';
 import { A } from '@solidjs/router';
 import Topbar from '../components/Topbar';
-import { getCurrentUser } from '../services/auth';
+import { getCurrentUser, loginWithDiscord } from '../services/auth';
 
 export default function PrivacyPolicy() {
   const [user, setUser] = createSignal<any>(null);
@@ -18,6 +18,7 @@ export default function PrivacyPolicy() {
         roomName={() => ''}
         user={user}
         onOpenProfile={() => {}}
+        onDiscordLogin={loginWithDiscord}
       />
 
       <main class="legal-container">

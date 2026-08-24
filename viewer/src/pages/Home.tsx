@@ -256,6 +256,7 @@ export default function Home() {
         roomName={() => activeRoom()?.name}
         user={user}
         onOpenProfile={() => setShowProfileModal(true)}
+        onDiscordLogin={handleDiscordLogin}
       />
 
       <Show

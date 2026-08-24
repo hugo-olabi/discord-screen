@@ -1647,6 +1647,26 @@ button {
   color: #ffffff;
 }
 
+.topbar-login-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #5865f2;
+  color: #ffffff;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.topbar-login-btn:hover {
+  background: #4752c4;
+  transform: translateY(-1px);
+}
+
 .lobby-footer {
   margin-top: auto;
   padding: 24px;
