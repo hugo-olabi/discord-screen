@@ -3,7 +3,7 @@ import Topbar from '../components/Topbar';
 import { isDiscordActivity } from '../services/auth';
 
 const DISCORD_CLIENT_ID = '1540065649181724722';
-const DISCORD_INSTALL_URL = `https://discord.com/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}`;
+const DISCORD_INSTALL_URL = `https://discord.com/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&scope=applications.commands+identify`;
 
 export default function DiscordInstall() {
   const inActivity = isDiscordActivity();
