@@ -148,11 +148,14 @@ def main():
         audio_task = asyncio.create_task(streamer_audio_loop(audio_proc.stdout)) if (audio_proc and audio_proc.stdout) else None
 
         cf_proc, cf_url = iniciar_tunel_cloudflared(porta_real)
-        tunnel_public_url = cf_url if cf_url else f"ws://127.0.0.1:{porta_real}/ws"
+        tunnel_public_url = cf_url if cf_url else None
 
-        print(f"  [Broadcast] WebSocket Tunnel activated: {tunnel_public_url}")
-        print("  [Supabase] Registering room as live on Supabase...")
-        atualizar_url_tunel_supabase(token, tunnel_public_url, status="live")
+        if tunnel_public_url:
+            print(f"  [Broadcast] WebSocket Tunnel activated: {tunnel_public_url}")
+            print("  [Supabase] Registering room as live on Supabase...")
+            atualizar_url_tunel_supabase(token, tunnel_public_url, status="live")
+        else:
+            print("  ⚠️ [Broadcast] Cloudflare tunnel unavailable. Automatic local fallback is disabled.")
 
         print("  ✅ Native broadcast connected via WebCodecs + WebSocket! Press Ctrl+C to terminate.\n")
         try:

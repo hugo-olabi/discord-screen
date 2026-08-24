@@ -301,12 +301,15 @@ class StreamerAppWindow(Gtk.ApplicationWindow):
 
                 cf_proc, cf_url = iniciar_tunel_cloudflared(porta_real)
                 self.persistent_cf_proc = cf_proc
-                self.persistent_tunnel_url = cf_url if cf_url else f"ws://127.0.0.1:{porta_real}/ws"
+                self.persistent_tunnel_url = cf_url if cf_url else None
 
-                GLib.idle_add(lambda: self.tunnel_badge.set_text(f"⚡ Tunnel Ready: {self.persistent_tunnel_url.replace('wss://', '').replace('ws://', '').split('/')[0]}"))
+                if self.persistent_tunnel_url:
+                    GLib.idle_add(lambda: self.tunnel_badge.set_text(f"⚡ Tunnel Ready: {self.persistent_tunnel_url.replace('wss://', '').replace('ws://', '').split('/')[0]}"))
+                else:
+                    GLib.idle_add(lambda: self.tunnel_badge.set_text("⚠️ Tunnel Unavailable (Public Cloudflare required)"))
 
                 # Se a transmissão já foi iniciada enquanto o túnel estava aquecendo, atualiza o Supabase agora com o URL público definitivo
-                if self.active_room_token:
+                if self.active_room_token and self.persistent_tunnel_url:
                     atualizar_url_tunel_supabase(self.active_room_token, self.persistent_tunnel_url, status="live")
 
                 try:
@@ -516,7 +519,7 @@ class StreamerAppWindow(Gtk.ApplicationWindow):
                 self.video_task = asyncio.create_task(ws_server.streamer_video_loop(out_stream))
                 self.audio_task = asyncio.create_task(ws_server.streamer_audio_loop(audio_proc.stdout)) if (audio_proc and audio_proc.stdout) else None
 
-                tunnel_public_url = self.persistent_tunnel_url or "ws://127.0.0.1:3001/ws"
+                tunnel_public_url = self.persistent_tunnel_url
 
                 GLib.idle_add(lambda: self.val_status.set_text("Live 🟢"))
                 GLib.idle_add(lambda: self.val_lag.set_text("< 40ms"))
@@ -526,7 +529,8 @@ class StreamerAppWindow(Gtk.ApplicationWindow):
                     new_video_cfg={"codedWidth": 1280 if profile_name == "mobile" else 1920, "codedHeight": 720 if profile_name == "mobile" else 1080, "fps": config.get("fps", 30)}
                 )
 
-                atualizar_url_tunel_supabase(token, tunnel_public_url, status="live")
+                if tunnel_public_url:
+                    atualizar_url_tunel_supabase(token, tunnel_public_url, status="live")
 
             if self.persistent_loop and self.persistent_loop.is_running():
                 asyncio.run_coroutine_threadsafe(run_async(), self.persistent_loop)
