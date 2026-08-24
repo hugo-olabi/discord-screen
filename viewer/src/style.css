@@ -1625,6 +1625,26 @@ button {
   color: var(--text);
 }
 
+.discord-install-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(88, 101, 242, 0.15);
+  border: 1px solid rgba(88, 101, 242, 0.3);
+  color: #ffffff;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 12.5px;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.discord-install-link:hover {
+  background: rgba(88, 101, 242, 0.3);
+  border-color: rgba(88, 101, 242, 0.5);
+  color: #ffffff;
+}
+
 .lobby-footer {
   margin-top: auto;
   padding: 24px;
