@@ -1,22 +1,25 @@
 import { A } from '@solidjs/router';
+import Topbar from '../components/Topbar';
 
 export default function PrivacyPolicy() {
   return (
+
     <div class="legal-page">
-      <header class="legal-header">
-        <div class="legal-header-content">
+      <Topbar
+        participantsCount={()=>0}
+        roomName={() => ""}
+        user={() => null}
+        onOpenProfile={() => console.log(true)}
+      />
+
+      <main class="legal-container">
+        <article class="legal-card">
           <A href="/" class="back-link">
             <svg viewBox="0 0 24 24" class="icon-sm" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M19 12H5M12 19l-7-7 7-7" />
             </svg>
             Back to StreamRoom
           </A>
-          <div class="brand-logo">StreamRoom</div>
-        </div>
-      </header>
-
-      <main class="legal-container">
-        <article class="legal-card">
           <h1 class="legal-title">Privacy Policy</h1>
           <p class="legal-updated">Last Updated: August 23, 2026</p>
 

@@ -48,7 +48,7 @@ export default function CreateRoomModal(props) {
                 Cancel
               </button>
               <button type="submit" class="btn go">
-                Create & Get Token
+                Create
               </button>
             </div>
           </form>
