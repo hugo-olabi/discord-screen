@@ -32,7 +32,8 @@ export async function loginWithDiscord() {
   } catch (err) {
     if (err.message?.includes('validation_failed') || err.message?.includes('provider is not enabled')) {
       throw new Error(
-        'Discord OAuth provider is not enabled in Supabase. Enable Discord in Supabase Dashboard -> Authentication -> Providers, or set your display name in Profile.'
+        'Discord OAuth provider is not enabled in Supabase. Enable Discord in Supabase Dashboard -> Authentication -> Providers, or set your display name in Profile.',
+        { cause: err }
       );
     }
     throw err;

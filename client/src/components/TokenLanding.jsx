@@ -7,6 +7,11 @@ export default function TokenLanding(props) {
   const parseToken = (input) => {
     if (!input) return '';
     const trimmed = input.trim();
+    if (trimmed.includes('/room/')) {
+      const parts = trimmed.split('/room/');
+      const endPart = parts[parts.length - 1];
+      return endPart.split('?')[0].split('#')[0].trim();
+    }
     if (trimmed.includes('token=')) {
       try {
         const urlParams = new URLSearchParams(trimmed.split('?')[1]);
@@ -82,7 +87,7 @@ export default function TokenLanding(props) {
                 type="text"
                 value={tokenInput()}
                 onInput={(e) => setTokenInput(e.target.value)}
-                placeholder="e.g. x9K2p7 or https://.../?token=x9K2p7"
+                placeholder="e.g. x9K2p7 or https://.../room/x9K2p7"
                 class="token-input"
                 autocomplete="off"
                 required

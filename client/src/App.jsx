@@ -7,6 +7,7 @@ export default function App() {
   return (
     <>
       <Route path="/" component={Home} />
+      <Route path="/room/:token" component={Home} />
       <Route path="/privacy-policy" component={PrivacyPolicy} />
       <Route path="/terms-of-service" component={TermsOfService} />
     </>

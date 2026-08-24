@@ -1,4 +1,5 @@
-import { createSignal, onMount, onCleanup, Show } from 'solid-js';
+import { createSignal, onMount, onCleanup, createEffect, Show } from 'solid-js';
+import { useParams, useNavigate } from '@solidjs/router';
 import Topbar from '../components/Topbar.jsx';
 import TokenLanding from '../components/TokenLanding.jsx';
 import StreamStage from '../components/StreamStage.jsx';
@@ -16,6 +17,9 @@ import { createBroadcaster } from '../services/broadcaster.js';
 import { getCurrentUser, loginWithDiscord, logoutDiscord, generateShortToken } from '../services/auth.js';
 
 export default function Home() {
+  const params = useParams();
+  const navigate = useNavigate();
+
   const [user, setUser] = createSignal({ id: crypto.randomUUID(), name: 'Guest User' });
   const [activeRoom, setActiveRoom] = createSignal(null);
   const [streams, setStreams] = createSignal([]);
@@ -73,9 +77,9 @@ export default function Home() {
       },
     });
 
-    // Check URL parameters for ?token=XYZ123
+    // Check URL parameters for ?token=XYZ123 fallback
     const urlParams = new URLSearchParams(window.location.search);
-    const tokenParam = urlParams.get('token') || urlParams.get('t') || urlParams.get('room');
+    const tokenParam = params.token || urlParams.get('token') || urlParams.get('t') || urlParams.get('room');
     if (tokenParam) {
       handleJoinToken(tokenParam);
     }
@@ -83,6 +87,12 @@ export default function Home() {
     // Run background cleanup for empty rooms every 2 minutes
     cleanupInactiveRooms();
     cleanupInterval = setInterval(cleanupInactiveRooms, 120000);
+  });
+
+  createEffect(() => {
+    if (params.token && (!activeRoom() || activeRoom().id !== params.token)) {
+      handleJoinToken(params.token);
+    }
   });
 
   onCleanup(() => {
@@ -98,6 +108,7 @@ export default function Home() {
     const room = await fetchRoomByToken(cleanToken);
     if (!room) {
       showToast(`Stream token "${cleanToken}" not found or inactive.`, true);
+      if (params.token) navigate('/', { replace: true });
       return;
     }
 
@@ -141,9 +152,10 @@ export default function Home() {
     setActiveRoom(room);
     setParticipantsCount(1);
 
-    // Update URL query string without reloading page
-    const newUrl = `${window.location.origin}${window.location.pathname}?token=${room.token || room.id}`;
-    window.history.replaceState({ path: newUrl }, '', newUrl);
+    const roomToken = room.token || room.id;
+    if (window.location.pathname !== `/room/${roomToken}`) {
+      navigate(`/room/${roomToken}`, { replace: true });
+    }
 
     // Subscribe to realtime changes for this room
     if (activeRealtimeChannel) supabase.removeChannel(activeRealtimeChannel);
@@ -166,10 +178,7 @@ export default function Home() {
     setStreams([]);
     setParticipantsCount(0);
 
-    // Clear token parameter from URL
-    const cleanUrl = `${window.location.origin}${window.location.pathname}`;
-    window.history.replaceState({ path: cleanUrl }, '', cleanUrl);
-
+    navigate('/', { replace: true });
     showToast('Left stream');
   }
 
