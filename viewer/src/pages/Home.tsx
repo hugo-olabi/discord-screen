@@ -247,14 +247,7 @@ export default function Home() {
     }
   }
 
-  function saveProfile(newName) {
-    if (newName) {
-      setUser((u) => ({ ...u, name: newName }));
-      localStorage.setItem('streamroom_user_name', newName);
-      setShowProfileModal(false);
-      showToast('Profile updated');
-    }
-  }
+
 
   return (
     <div id="app-content" class="app-layout">
@@ -343,7 +336,10 @@ export default function Home() {
         isOpen={showProfileModal}
         user={user}
         onClose={() => setShowProfileModal(false)}
-        onSave={saveProfile}
+        onLogout={async () => {
+          await handleDiscordLogout();
+          setShowProfileModal(false);
+        }}
       />
     </div>
   );

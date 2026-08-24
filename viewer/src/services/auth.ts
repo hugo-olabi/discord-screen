@@ -57,11 +57,12 @@ export async function initDiscordActivity() {
         isActivity: true,
       };
       localStorage.setItem('streamroom_discord_user', JSON.stringify(user));
+      localStorage.setItem('streamroom_logged_user', JSON.stringify(user));
       return user;
     }
   } catch (err) {
     console.warn('[Discord Activity Auth Warning]', err);
-    const cached = localStorage.getItem('streamroom_discord_user');
+    const cached = localStorage.getItem('streamroom_discord_user') || localStorage.getItem('streamroom_logged_user');
     if (cached) {
       try {
         return JSON.parse(cached);
@@ -119,8 +120,13 @@ export async function loginWithDiscord() {
 }
 
 export async function logoutDiscord() {
-  await supabase.auth.signOut();
+  try {
+    await supabase.auth.signOut();
+  } catch {}
+  localStorage.removeItem('streamroom_logged_user');
   localStorage.removeItem('streamroom_discord_user');
+  localStorage.removeItem('streamroom_user_name');
+  localStorage.removeItem('streamroom_user_id');
 }
 
 export async function getCurrentUser() {
@@ -128,6 +134,7 @@ export async function getCurrentUser() {
   if (isDiscordActivity()) {
     const activityUser = await initDiscordActivity();
     if (activityUser) {
+      localStorage.setItem('streamroom_logged_user', JSON.stringify(activityUser));
       return activityUser;
     }
   }
@@ -136,16 +143,25 @@ export async function getCurrentUser() {
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.user) {
       const user = session.user;
-      return {
+      const loggedUser = {
         id: user.id,
         name: user.user_metadata?.full_name || user.user_metadata?.custom_claims?.global_name || user.email?.split('@')[0] || 'Discord User',
         avatar: user.user_metadata?.avatar_url || user.user_metadata?.picture || null,
         isDiscord: true,
         isActivity: false,
       };
+      localStorage.setItem('streamroom_logged_user', JSON.stringify(loggedUser));
+      return loggedUser;
     }
   } catch {
-    /* Fallback to local user */
+    /* Fallback to stored user */
+  }
+
+  const cached = localStorage.getItem('streamroom_logged_user');
+  if (cached) {
+    try {
+      return JSON.parse(cached);
+    } catch {}
   }
 
   const savedName = localStorage.getItem('streamroom_user_name');
