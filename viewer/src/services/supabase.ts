@@ -5,19 +5,25 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishabl
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
- * Fetches a single room strictly by exact token match.
- * Prevents bulk listing of active rooms.
+ * Fetches a single room strictly by exact token or ID match.
+ * Prevents bulk listing of active rooms and handles UUID vs short-token queries cleanly.
  */
-export async function fetchRoomByToken(token) {
+export async function fetchRoomByToken(token: string) {
   if (!token) return null;
   const cleanToken = token.trim();
+  const isUuid = UUID_REGEX.test(cleanToken);
 
-  const { data, error } = await supabase
-    .from('rooms')
-    .select('*')
-    .or(`id.eq.${cleanToken},token.eq.${cleanToken}`)
-    .maybeSingle();
+  let query = supabase.from('rooms').select('*');
+  if (isUuid) {
+    query = query.or(`id.eq.${cleanToken},token.eq.${cleanToken}`);
+  } else {
+    query = query.eq('token', cleanToken);
+  }
+
+  const { data, error } = await query.maybeSingle();
 
   if (error || !data) return null;
 
@@ -33,11 +39,10 @@ export async function fetchRoomByToken(token) {
 }
 
 /**
- * Creates a room with a short 6-character random token.
+ * Creates a room with a short random token.
  */
-export async function createRoomRecord({ token, name, password, streamerName, streamerId }) {
+export async function createRoomRecord({ token, name, password, streamerName, streamerId }: any) {
   const roomData = {
-    id: token,
     token: token,
     name: name || `Stream ${token}`,
     password: password || null,
