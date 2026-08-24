@@ -4,6 +4,10 @@
   "framework": "vite",
   "rewrites": [
     {
+      "source": "/auth/v1/callback",
+      "destination": "/api/auth/v1/callback"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

@@ -37,6 +37,7 @@ export default defineConfig([
     files: [
       'server/**/*.js',
       'scripts/**/*.mjs',
+      'api/**/*.js',
       'native-streamer/**/*',
       'client/vite.config.js',
       'vitest.*.js',

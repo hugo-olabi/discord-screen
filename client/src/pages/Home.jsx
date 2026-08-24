@@ -285,19 +285,21 @@ export default function Home() {
         />
       </Show>
 
-      <Bottombar
-        activeRoom={activeRoom}
-        isSharing={isSharing}
-        isCamera={isCamera}
-        volume={volume}
-        onToggleShare={toggleScreenShare}
-        onToggleCamera={toggleCamera}
-        onOpenNativeModal={() => setShowNativeModal(true)}
-        onVolumeChange={setVolume}
-        onToggleFullscreen={toggleFullscreen}
-        onOpenSettings={() => setShowSettingsModal(true)}
-        onLeaveRoom={handleLeaveRoom}
-      />
+      <Show when={activeRoom()}>
+        <Bottombar
+          activeRoom={activeRoom}
+          isSharing={isSharing}
+          isCamera={isCamera}
+          volume={volume}
+          onToggleShare={toggleScreenShare}
+          onToggleCamera={toggleCamera}
+          onOpenNativeModal={() => setShowNativeModal(true)}
+          onVolumeChange={setVolume}
+          onToggleFullscreen={toggleFullscreen}
+          onOpenSettings={() => setShowSettingsModal(true)}
+          onLeaveRoom={handleLeaveRoom}
+        />
+      </Show>
 
       <Toast message={toastMessage} isError={toastIsError} />
 
