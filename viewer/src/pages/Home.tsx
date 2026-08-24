@@ -76,12 +76,14 @@ export default function Home() {
 
     const urlParams = new URLSearchParams(window.location.search);
     const hasLocalParam = urlParams.has('local');
+    const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const allowLocalFallback = hasLocalParam || isLocalHost;
 
     let wsUrl = targetRoom.tunnelUrl || null;
     const isLocalUrl = Boolean(wsUrl && (wsUrl.includes('127.0.0.1') || wsUrl.includes('localhost')));
 
     if (isLocalUrl || !wsUrl) {
-      if (!hasLocalParam) {
+      if (!allowLocalFallback) {
         if (wsUrl || targetRoom.status === 'live') {
           showToast('Local fallback disabled. Add ?local to URL parameter to connect.', true);
         }
@@ -336,11 +338,13 @@ export default function Home() {
     if (isSharing()) {
       broadcaster?.stop();
       setIsSharing(false);
+      setStreams([]);
     } else {
-      const ok = await broadcaster?.startScreenShare();
-      if (ok) {
+      const localStream = await broadcaster?.startScreenShare();
+      if (localStream) {
         setIsSharing(true);
         setIsCamera(false);
+        setStreams([{ id: activeRoom().id, ownerName: user().name, mediaStream: localStream, isSelf: true }]);
       }
     }
   }
@@ -353,11 +357,13 @@ export default function Home() {
     if (isCamera()) {
       broadcaster?.stop();
       setIsCamera(false);
+      setStreams([]);
     } else {
-      const ok = await broadcaster?.startCamera();
-      if (ok) {
+      const localStream = await broadcaster?.startCamera();
+      if (localStream) {
         setIsCamera(true);
         setIsSharing(false);
+        setStreams([{ id: activeRoom().id, ownerName: user().name, mediaStream: localStream, isSelf: true }]);
       }
     }
   }

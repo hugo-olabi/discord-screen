@@ -41,7 +41,7 @@ def pack_media_packet(slot: int, is_keyframe: bool, pts_us: float, payload: byte
 
 async def handle_ws(request):
     global keyframe_requested
-    ws = web.WebSocketResponse(protocols=('chat', 'mqtt', ''))
+    ws = web.WebSocketResponse()
     await ws.prepare(request)
     clients.add(ws)
     logger.info(f"⚡ WebSocket client connected: {request.remote}")

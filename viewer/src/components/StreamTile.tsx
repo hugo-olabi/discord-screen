@@ -3,27 +3,33 @@ import { createPlayer } from '../services/player.js';
 
 export default function StreamTile(props) {
   let canvasRef;
+  let videoRef;
   let player = null;
   const [stats, setStats] = createSignal({ fps: 0, lag: 0, res: '1080p' });
 
   onMount(() => {
-    if (canvasRef && props.stream) {
-      player = createPlayer(canvasRef, {
-        onError: (err) => {
-          console.warn('[StreamTile player error]', err);
-        },
-        onSizeChange: ({ width, height }) => {
-          setStats((s) => ({ ...s, res: `${width}x${height}` }));
-        },
-        onRequestKeyframe: () => {
-          props.onRequestKeyframe?.(props.stream.id);
-        },
-      });
+    if (props.stream) {
+      if (props.stream.mediaStream && videoRef) {
+        videoRef.srcObject = props.stream.mediaStream;
+        videoRef.play().catch(() => {});
+      } else if (canvasRef) {
+        player = createPlayer(canvasRef, {
+          onError: (err) => {
+            console.warn('[StreamTile player error]', err);
+          },
+          onSizeChange: ({ width, height }) => {
+            setStats((s) => ({ ...s, res: `${width}x${height}` }));
+          },
+          onRequestKeyframe: () => {
+            props.onRequestKeyframe?.(props.stream.id);
+          },
+        });
 
-      if (props.stream.config) {
-        player.start(props.stream.config);
+        if (props.stream.config) {
+          player.start(props.stream.config);
+        }
+        props.stream.onPlayerReady?.(player);
       }
-      props.stream.onPlayerReady?.(player);
     }
   });
 
@@ -32,11 +38,19 @@ export default function StreamTile(props) {
       player.stop();
       player = null;
     }
+    if (videoRef) {
+      videoRef.srcObject = null;
+    }
   });
 
   return (
     <div class={`tile ${props.stream?.isSelf ? 'sharing' : ''}`}>
-      <canvas ref={canvasRef} class="tile-canvas" />
+      <Show
+        when={props.stream?.mediaStream}
+        fallback={<canvas ref={canvasRef} class="tile-canvas" />}
+      >
+        <video ref={videoRef} autoplay playsinline muted class="tile-canvas" />
+      </Show>
 
       <div class="tile-overlay">
         <div class="tile-user">
@@ -49,7 +63,7 @@ export default function StreamTile(props) {
         <div class="tile-actions">
           <button
             class="tile-btn"
-            onClick={() => props.onToggleTileFullscreen?.(canvasRef)}
+            onClick={() => props.onToggleTileFullscreen?.(canvasRef || videoRef)}
             title="Full Screen"
           >
             <svg viewBox="0 0 24 24" class="icon-sm" fill="currentColor">
