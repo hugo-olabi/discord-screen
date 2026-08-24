@@ -39,13 +39,14 @@ export async function fetchRoomByToken(token: string) {
 }
 
 /**
- * Creates a room with a short random token.
+ * Creates a room with a guaranteed non-null ID and short random token.
  */
 export async function createRoomRecord({ token, name, password, streamerName, streamerId }: any) {
+  const roomToken = token || crypto.randomUUID().slice(0, 6);
   const roomData = {
-    id: token,
-    token: token,
-    name: name || `Stream ${token}`,
+    id: roomToken,
+    token: roomToken,
+    name: name || `Stream ${roomToken}`,
     password: password || null,
     streamer_id: streamerId || null,
     streamer_name: streamerName || 'Host',
